@@ -53,6 +53,7 @@ static size_t lowmem_minfree[6] = {
 static int lowmem_minfree_size = 4;
 
 static struct task_struct *lowmem_deathpending;
+static unsigned long lowmem_deathpending_timeout;
 
 #define lowmem_print(level, x...)			\
 	do {						\
@@ -101,7 +102,8 @@ static int lowmem_shrink(int nr_to_scan, gfp_t gfp_mask)
 	 * this pass.
 	 *
 	 */
-	if (lowmem_deathpending)
+	if (lowmem_deathpending &&
+	    time_before_eq(jiffies, lowmem_deathpending_timeout))
 		return 0;
 
 	if (lowmem_adj_size < array_size)
@@ -170,6 +172,7 @@ static int lowmem_shrink(int nr_to_scan, gfp_t gfp_mask)
 			     selected->pid, selected->comm,
 			     selected_oom_adj, selected_tasksize);
 		lowmem_deathpending = selected;
+		lowmem_deathpending_timeout = jiffies + HZ;
 		task_free_register(&task_nb);
 		force_sig(SIGKILL, selected);
 		rem -= selected_tasksize;
