@@ -1,0 +1,154 @@
+#
+# HUAWEI OWN CONFIG
+#
+
+menuconfig HUAWEI_APPS
+	tristate "Huawei Configuration"
+	default y
+	help
+		if Y , select CONFIG_HUAWEI_APPS  
+
+if HUAWEI_APPS
+config HUAWEI_FEATURE_BSP
+	tristate "Huawei bsp feature"	
+	default y
+	help
+	  if Y ,select HUAWEI_FEATURE_BSP  
+
+config	HUAWEI_FEATURE_DEBUG
+	tristate "huawei debug feature"
+	default n
+	help
+	  if Y ,select HUAWEI_FEATURE_DEBUG, when release vesion , comment  HUAWEI_FEATURE_U8220_DEBUG	  	  	  
+config DIAG_ON_UART3
+        tristate "Diag on uart3"
+	default n
+	help
+	  if Y, select CONFIG_DIAG_ON_UART3, Support for Diag service on Arm11 Uart3.
+
+
+config HUAWEI_STEREO_HEADSET
+	tristate "Stereo headset is used"
+	default n
+	help
+	  if Y ,select HUAWEI_STEREO_HEADSET
+
+config HUAWEI_SMI_64M
+	tristate "Stereo headset is used"
+	default n
+	help
+	  if Y ,select HUAWEI_SMI_64M, this supprot 64M smi 
+config HUAWEI_SHARE_MEMORY_DEVICE
+	bool "huawei share memory device, used to communicate with arm 9"
+	depends on HUAWEI_KERNEL=y
+	default y
+	help
+	  Say Y here if you want support for share memory device support.
+
+config HUAWEI_FACTORY_RECOVERY
+	tristate "Android Factory Recovery is used"
+	default n
+	help
+	  if Y ,select Android Factory Recovery, and support Wipe userdata and cache flash partitions
+
+config HUAWEI_USB_FUNCTION
+	tristate "Utilize Huawei USB PID&VID"
+	default n
+	help
+	  if Y ,select HUAWEI_USB_FUNCTION, this supprot Huawei USB PID&VID	  	  	  
+
+config	HUAWEI_FEATURE_U8220_T2
+	tristate "huawei T2 feature"
+	default n
+	help
+	  if Y ,select HUAWEI_FEATURE_U8220_T2, this supprot Huawei T2 Hardware modifiction	  	  	  
+
+config	HUAWEI_FEATURE_U8220_PRODUCTION
+	tristate "huawei production feature"
+	default n
+	help
+	  if Y ,select HUAWEI_FEATURE_U8220_PRODUCTION, when product ,open this feature
+
+config	HUAWEI_USB_SERIAL
+	tristate "huawei USB Serial number"
+	default n
+	help
+	  if Y ,select HUAWEI_USB_SERIAL, The phone use the identify Serial number
+
+config	HUAWEI_ACPU_CLOCK
+	tristate "huawei Acpu clock table"
+	default n
+	help
+	  if Y ,select HUAWEI_ACPU_CLOCK, this will reset acpu clock table
+
+config	HUAWEI_NV_LOG_CONTROL
+	tristate "huawei nv log table"
+	default n
+	help
+	  if Y ,select HUAWEI_NV_LOG_CONTROL, this will store log_enabl and log_priority in nv item
+
+config	HUAWEI_FEATURE_U8220_PP1
+	tristate "huawei pp1 feature"
+	default n
+	help
+	  if Y ,select HUAWEI_FEATURE_U8220_PP1, this supprot Huawei PP1 Hardware modifiction	  	  	  
+
+config	HUAWEI_CRASH_DUMP
+	tristate "huawei crash dump"
+	depends on  HUAWEI_FEATURE_DEBUG
+	default n
+	help
+	  if Y ,select HUAWEI_CRASH_DUMP, this will dump crash infomation to memory
+
+config	HUAWEI_FEATURE_U8220_BLUETOOTH
+	tristate "huawei bluetooth sleep modification"
+	default n
+	help
+	  if Y ,select HUAWEI_FEATURE_U8220_BLUETOOTH, this will alloc a wakelock when work , when uart sleep then release 
+
+config HUAWEI_DIAG_DEBUG
+	tristate "huawei diag debug"
+	depends on  HUAWEI_FEATURE_DEBUG
+	default n
+	help
+	  if Y ,select HUAWEI_DIAG_DEBUG, diag port will enable
+
+config HUAWEI_USB_CONSOLE
+	tristate "huawei usb console"
+	depends on  HUAWEI_FEATURE_DEBUG
+	default n
+	help
+	  if Y ,select HUAWEI_USB_CONSOLE, usb_console port will enable
+
+config HUAWEI_USB_PID_GENERAL_RELEASE
+	tristate "huawei general release"
+	default n
+	help
+	  if Y ,select HUAWEI_USB_PID_GENERAL_RELEASE, select USB pid general release product
+
+config HUAWEI_USB_FUNCTION_PCUI
+	tristate "huawei usb function pcui"
+	default n
+	help
+	  if Y ,select HUAWEI_USB_PID_GENERAL_RELEASE, select USB pid general release product
+	  
+config HUAWEI_BACK_KEY_MULTI
+	bool "huawei back key multi"
+	depends on HUAWEI_KERNEL=y
+	default n
+	help
+	  Say Y here if you want support for huawei back key multi
+
+config HUAWEI_FOTA_UPDATA
+	tristate "fota updata"
+	default n
+	help
+	  if Y ,select HUAWEI_FOTA_UPDATA, this supprot fota updata
+
+config USB_AUTO_INSTALL
+	bool "usb auto install"
+	default n
+	help
+	  if Y ,select USB_AUTO_INSTALL
+
+endif

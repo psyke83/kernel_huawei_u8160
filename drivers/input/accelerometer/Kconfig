@@ -1,0 +1,58 @@
+#
+# accelerometer driver configuration
+#
+menuconfig INPUT_ACCELEROMETER
+	bool "Accelerometer"
+	help
+	  Say Y here, and a list of supported ACCELEROMETERs will be displayed.
+	  This option doesn't affect the kernel.
+
+	 
+
+if INPUT_ACCELEROMETER
+
+config ACCELEROMETER_ADXL345
+	tristate "ADI ADXL345 accelerometer"	
+	select SERIO
+	help
+	  Say Y here if you have the ADXL345 accelerometer.
+
+	  
+config ACCELEROMETER_ST_L1S35DE
+	tristate "ST LIS35DE accelerometer"	
+	select SERIO
+	help
+	  Say Y here if you have the ST LIS35DE accelerometer.
+
+config ACCELEROMETER_ADI_ADXL346
+	tristate "ADI ADXL346 accelerometer"
+	select SERIO
+	help
+	  Say Y here if you have the ADI ADXL346 accelerometer.
+
+config ACCELEROMETER_ST_LIS3XH
+	tristate "ST LIS3DH and LIS331DLH accelerometer"	
+	select SERIO
+	help
+	  Say Y here if you have the ST LIS3DH and LIS331DLH accelerometer.
+
+
+config ACCELEROMETER_MMA7455L
+        tristate "FREESCALE MMA7455L accelerometer"
+	select SERIO
+	help
+	  Say Y here if you have the FREESCALE MMA7455L accelerometer.
+endif
+
+config ACCELEROMETER_MMA8452
+	tristate "FREESCALE MMA8452 accelerometer"
+	select SERIO
+	help
+	  Say Y here if you have the FREESCALE MMA8452 accelerometer.
+
+config ACCELEROMETER_BOSCH_BMA250
+	tristate "BOSCH BMA250 accelerometer"
+	select SERIO
+	help
+	  Say Y here if you have the BOSCH BMA250 accelerometer.
+	  

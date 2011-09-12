@@ -1,0 +1,2263 @@
+/*
+ * Copyright (c) 2008-2009 QUALCOMM USA, INC.
+ *
+ * All source code in this file is licensed under the following license
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can find it at http://www.fsf.org
+ */
+
+#include <linux/delay.h>
+#include <linux/types.h>
+#include <linux/i2c.h>
+#include <linux/uaccess.h>
+#include <linux/miscdevice.h>
+#include <media/msm_camera.h>
+#include <mach/gpio.h>
+#include <mach/camera.h>
+#include "hi253.h"
+
+#ifdef CONFIG_HUAWEI_HW_DEV_DCT
+#include <linux/hw_dev_dec.h>
+#endif
+
+#include "linux/hardware_self_adapt.h"
+#undef CDBG
+#define CDBG(fmt, args...) printk(KERN_INFO "hi253.c: " fmt, ## args)
+
+/*=============================================================
+    SENSOR REGISTER DEFINES
+==============================================================*/
+#define HI253_REG_CHIP_ID 0x04
+#define HI253_CHIP_ID 0x92
+#define HI253_REG_RESET_REGISTER 0x01
+
+
+enum hi253_test_mode_t
+{
+    TEST_OFF,
+    TEST_1,
+    TEST_2,
+    TEST_3
+};
+
+enum hi253_resolution_t
+{
+    QTR_SIZE,
+    FULL_SIZE,
+    INVALID_SIZE
+};
+
+enum hi253_reg_update_t
+{
+    /* Sensor egisters that need to be updated during initialization */
+    REG_INIT,
+
+    /* Sensor egisters that needs periodic I2C writes */
+    UPDATE_PERIODIC,
+
+    /* All the sensor Registers will be updated */
+    UPDATE_ALL,
+
+    /* Not valid update */
+    UPDATE_INVALID
+};
+
+enum hi253_setting_t
+{
+    RES_PREVIEW,
+    RES_CAPTURE
+};
+
+typedef enum
+{
+  CAMERA_WB_MIN_MINUS_1,
+  CAMERA_WB_AUTO = 1,
+  CAMERA_WB_CUSTOM,
+  CAMERA_WB_INCANDESCENT,
+  CAMERA_WB_FLUORESCENT,
+  CAMERA_WB_DAYLIGHT,
+  CAMERA_WB_CLOUDY_DAYLIGHT,
+  CAMERA_WB_TWILIGHT,
+  CAMERA_WB_SHADE,
+  CAMERA_WB_MAX_PLUS_1
+} config3a_wb_t;
+
+/* for 15 fps preview */
+#define HI253_DEFAULT_CLOCK_RATE 24000000
+
+
+#define HI253_ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
+/* FIXME: Changes from here */
+struct hi253_work_t
+{
+    struct work_struct work;
+};
+
+struct hi253_ctrl_t
+{
+    const struct  msm_camera_sensor_info *sensordata;
+
+    int sensormode;
+    uint32_t           fps_divider; /* init to 1 * 0x00000400 */
+    uint32_t           pict_fps_divider; /* init to 1 * 0x00000400 */
+
+    uint16_t curr_lens_pos;
+    uint16_t init_curr_lens_pos;
+    uint16_t my_reg_gain;
+    uint32_t my_reg_line_count;
+
+    enum hi253_resolution_t prev_res;
+    enum hi253_resolution_t pict_res;
+    enum hi253_resolution_t curr_res;
+    enum hi253_test_mode_t  set_test;
+
+    unsigned short imgaddr;
+};
+
+struct hi253_i2c_reg_conf
+{
+	unsigned char waddr;
+	unsigned char wdata;
+};
+
+const static char hi253_supported_effect[] = "none,mono,negative,solarize,sepia,aqua";
+static struct hi253_i2c_reg_conf hi253_init_reg_config_comm[] =
+{
+/////// Start Sleep ///////
+{0x01, 0xf1}, //0xf9}, //sleep on
+{0x08, 0x0f}, //Hi-Z on
+{0x01, 0xf0}, //0xf8}, //sleep off
+
+{0x03, 0x00}, // Dummy 750us START
+{0x03, 0x00},
+{0x03, 0x00},
+{0x03, 0x00},
+{0x03, 0x00},
+{0x03, 0x00},
+{0x03, 0x00},
+{0x03, 0x00},
+{0x03, 0x00},
+{0x03, 0x00}, // Dummy 750us END
+
+{0x0e, 0x03}, //PLL On
+{0x0e, 0x73}, //PLLx2
+
+{0x03, 0x00}, // Dummy 750us START
+{0x03, 0x00},
+{0x03, 0x00},
+{0x03, 0x00},
+{0x03, 0x00},
+{0x03, 0x00},
+{0x03, 0x00},
+{0x03, 0x00},
+{0x03, 0x00},
+{0x03, 0x00}, // Dummy 750us END
+
+{0x0e, 0x00}, //PLL off
+{0x01, 0xf1}, //0xf1}, //sleep on
+{0x08, 0x00}, //Hi-Z off
+
+{0x01, 0xf3}, //0xf3},
+{0x01, 0xf1}, //0xf1},
+
+// PAGE 20
+{0x03, 0x20}, //page 20
+{0x10, 0x1c}, //ae off
+
+// PAGE 22
+{0x03, 0x22}, //page 22
+{0x10, 0x69}, //awb off
+
+
+//Initial Start
+/////// PAGE 0 START ///////
+{0x03, 0x00},
+{0x10, 0x11}, //for Qualcomm//0x00}, // Sub1/2_Preview2 Mode_H binning  19 
+{0x11, 0x93},
+{0x12, 0x24}, //0x00}, //04 
+
+{0x0b, 0xaa}, // ESD Check Register
+{0x0c, 0xaa}, // ESD Check Register
+{0x0d, 0xaa}, // ESD Check Register
+
+{0x20, 0x00}, // Windowing start point Y
+{0x21, 0x04},
+{0x22, 0x00}, // Windowing start point X
+{0x23, 0x07},
+
+{0x24, 0x04},
+{0x25, 0xb0},
+{0x26, 0x06},
+{0x27, 0x40}, // WINROW END
+
+{0x40, 0x01}, //Hblank 408
+{0x41, 0x98}, 
+{0x42, 0x00}, //Vblank 20
+{0x43, 0x14},
+
+{0x45, 0x04},
+{0x46, 0x18},
+{0x47, 0xd8},
+
+//BLC
+{0x80, 0x2e},
+{0x81, 0x7e},
+{0x82, 0x90},
+{0x83, 0x00},
+{0x84, 0x0c},
+{0x85, 0x00},
+{0x90, 0x0a}, //BLC_TIME_TH_ON
+{0x91, 0x0a}, //BLC_TIME_TH_OFF 
+{0x92, 0x98}, //BLC_AG_TH_ON
+{0x93, 0x90}, //BLC_AG_TH_OFF
+{0x94, 0x75},
+{0x95, 0x70},
+{0x96, 0xdc},
+{0x97, 0xfe},
+{0x98, 0x38},
+
+//OutDoor  BLC
+{0x99, 0x44},
+{0x9a, 0x44},
+{0x9b, 0x44},
+{0x9c, 0x44},
+
+//Dark BLC
+{0xa0, 0x44},
+{0xa2, 0x44},
+{0xa4, 0x44},
+{0xa6, 0x44},
+
+//Normal BLC
+{0xa8, 0x44},
+{0xaa, 0x44},
+{0xac, 0x44},
+{0xae, 0x44},
+
+/////// PAGE 2 START ///////
+{0x03, 0x02},
+{0x12, 0x03},
+{0x13, 0x03},
+{0x16, 0x00},
+{0x17, 0x8C},
+{0x18, 0x4c}, //Double_AG off
+{0x19, 0x00},
+{0x1a, 0x39}, //ADC400->560
+{0x1c, 0x09},
+{0x1d, 0x40},
+{0x1e, 0x30},
+{0x1f, 0x10},
+
+{0x20, 0x77},
+{0x21, 0xde},
+{0x22, 0xa7},
+{0x23, 0x30}, //CLAMP
+{0x27, 0x3c},
+{0x2b, 0x80},
+{0x2e, 0x11},
+{0x2f, 0xa1},
+{0x30, 0x05}, //For Hi-253 never no change 0x05
+
+{0x50, 0x20},
+{0x52, 0x01},
+{0x53, 0xc1}, //20101203
+{0x55, 0x1c},
+{0x56, 0x11},
+{0x5d, 0xa2},
+{0x5e, 0x5a},
+
+{0x60, 0x87},
+{0x61, 0x99},
+{0x62, 0x88},
+{0x63, 0x97},
+{0x64, 0x88},
+{0x65, 0x97},
+
+{0x67, 0x0c},
+{0x68, 0x0c},
+{0x69, 0x0c},
+
+{0x72, 0x89},
+{0x73, 0x96},
+{0x74, 0x89},
+{0x75, 0x96},
+{0x76, 0x89},
+{0x77, 0x96},
+
+{0x7c, 0x85},
+{0x7d, 0xaf},
+{0x80, 0x01},
+{0x81, 0x7f},
+{0x82, 0x13},
+
+{0x83, 0x24},
+{0x84, 0x7d},
+{0x85, 0x81},
+{0x86, 0x7d},
+{0x87, 0x81},
+
+{0x92, 0x48},
+{0x93, 0x54},
+{0x94, 0x7d},
+{0x95, 0x81},
+{0x96, 0x7d},
+{0x97, 0x81},
+
+{0xa0, 0x02},
+{0xa1, 0x7b},
+{0xa2, 0x02},
+{0xa3, 0x7b},
+{0xa4, 0x7b},
+{0xa5, 0x02},
+{0xa6, 0x7b},
+{0xa7, 0x02},
+
+{0xa8, 0x85},
+{0xa9, 0x8c},
+{0xaa, 0x85},
+{0xab, 0x8c},
+{0xac, 0x10},
+{0xad, 0x16},
+{0xae, 0x10},
+{0xaf, 0x16},
+
+{0xb0, 0x99},
+{0xb1, 0xa3},
+{0xb2, 0xa4},
+{0xb3, 0xae},
+{0xb4, 0x9b},
+{0xb5, 0xa2},
+{0xb6, 0xa6},
+{0xb7, 0xac},
+{0xb8, 0x9b},
+{0xb9, 0x9f},
+{0xba, 0xa6},
+{0xbb, 0xaa},
+{0xbc, 0x9b},
+{0xbd, 0x9f},
+{0xbe, 0xa6},
+{0xbf, 0xaa},
+
+{0xc4, 0x2c},
+{0xc5, 0x43},
+{0xc6, 0x63},
+{0xc7, 0x79},
+
+{0xc8, 0x2d},
+{0xc9, 0x42},
+{0xca, 0x2d},
+{0xcb, 0x42},
+{0xcc, 0x64},
+{0xcd, 0x78},
+{0xce, 0x64},
+{0xcf, 0x78},
+
+{0xd0, 0x0a},
+{0xd1, 0x09},
+{0xd4, 0x0a}, //DCDC_TIME_TH_ON
+{0xd5, 0x0a}, //DCDC_TIME_TH_OFF 
+{0xd6, 0x98}, //DCDC_AG_TH_ON
+{0xd7, 0x90}, //DCDC_AG_TH_OFF
+{0xe0, 0xc4},
+{0xe1, 0xc4},
+{0xe2, 0xc4},
+{0xe3, 0xc4},
+{0xe4, 0x00},
+{0xe8, 0x80},
+{0xe9, 0x40},
+{0xea, 0x7f},
+
+{0xf0, 0x01},  //	sram1_cfg     
+{0xf1, 0x01},  //	sram2_cfg     
+{0xf2, 0x01},  //	sram3_cfg     
+{0xf3, 0x01},  //	sram4_cfg     
+{0xf4, 0x01},  //	sram5_cfg     
+
+
+/////// PAGE 3 ///////
+{0x03, 0x03},
+{0x10, 0x10},
+
+/////// PAGE 10 START ///////
+{0x03, 0x10},
+{0x10, 0x01}, // CrYCbY // For Demoset 0x03
+{0x12, 0x30},
+{0x13, 0x02},
+{0x20, 0x00},
+
+{0x30, 0x00},
+{0x31, 0x00},
+{0x32, 0x00},
+{0x33, 0x00},
+
+{0x34, 0x30},
+{0x35, 0x00},
+{0x36, 0x00},
+{0x38, 0x00},
+{0x3e, 0x58},
+{0x3f, 0x00},
+
+{0x40, 0x80},
+{0x41, 0x00},
+{0x48, 0x85},//80 85
+{0x60, 0x67},
+{0x61, 0x96}, //0x7c}, //7e //8e //88 //80
+{0x62, 0x96}, //0x7c}, //7e //8e //88 //80
+{0x63, 0x50}, //Double_AG 50->30
+{0x64, 0x41},
+
+{0x66, 0x42},
+{0x67, 0x20},
+
+{0x6a, 0x87},//80}, //8a 80
+{0x6b, 0x8A},//89}, //74 84
+{0x6c, 0x87},//80}, //7e //7a
+{0x6d, 0x87},//80}, //8e
+
+//Don't touch//////////////////////////
+//{0x72, 0x84},
+//{0x76, 0x19},
+//{0x73, 0x70},
+//{0x74, 0x68},
+//{0x75, 0x60}, // white protection ON
+//{0x77, 0x0e}, //08 //0a
+//{0x78, 0x2a}, //20
+//{0x79, 0x08},
+////////////////////////////////////////
+
+/////// PAGE 11 START ///////
+{0x03, 0x11},
+{0x10, 0x7f},
+{0x11, 0x40},
+{0x12, 0x0a}, // Blue Max-Filter Delete
+{0x13, 0xbb},
+
+{0x26, 0x31}, // Double_AG 31->20
+{0x27, 0x34}, // Double_AG 34->22
+{0x28, 0x0f},
+{0x29, 0x10},
+{0x2b, 0x30},
+{0x2c, 0x32},
+
+//Out2 D-LPF th
+{0x30, 0x70},
+{0x31, 0x10},
+{0x32, 0x63}, //110126 noise improve//0x58},
+{0x33, 0x0a}, //110126 noise improve//0x09},
+{0x34, 0x07}, //110126 noise improve//0x06},
+{0x35, 0x04}, //110126 noise improve//0x03},
+
+//Out1 D-LPF th
+{0x36, 0x70},
+{0x37, 0x18},
+{0x38, 0x63}, //110126 noise improve//0x58},
+{0x39, 0x0a}, //110126 noise improve//0x09},
+{0x3a, 0x07}, //110126 noise improve//0x06},
+{0x3b, 0x04}, //110126 noise improve//0x03},
+
+//Indoor D-LPF th
+{0x3c, 0x80},
+{0x3d, 0x18},
+{0x3e, 0x80}, //80
+{0x3f, 0x0c},
+{0x40, 0x09},
+{0x41, 0x06},
+
+{0x42, 0x80},
+{0x43, 0x18},
+{0x44, 0x80}, //80
+{0x45, 0x12},
+{0x46, 0x10},
+{0x47, 0x10},
+
+{0x48, 0x90},
+{0x49, 0x40},
+{0x4a, 0x80},
+{0x4b, 0x13},
+{0x4c, 0x10},
+{0x4d, 0x11},
+
+{0x4e, 0x80},
+{0x4f, 0x30},
+{0x50, 0x80},
+{0x51, 0x13},
+{0x52, 0x10},
+{0x53, 0x13},
+
+{0x54, 0x11}, // Skip Edge Outdoor
+{0x55, 0x0D}, // Skip Edge Outdoor
+{0x56, 0x20}, // Skip Edge Outdoor
+{0x57, 0x01},
+{0x58, 0x00},
+{0x59, 0x00},
+
+{0x5a, 0x1f}, //18
+{0x5b, 0x3F}, // Impulse Removed
+{0x5c, 0x00},
+
+{0x60, 0x3f},
+{0x62, 0x10},//differ //1st 0x50
+{0x70, 0x06},
+
+/////// PAGE 12 START ///////
+{0x03, 0x12},
+{0x20, 0x0f},
+{0x21, 0x0f},
+
+{0x25, 0x30}, //0x30  Sharp Pre.
+
+{0x28, 0x00},
+{0x29, 0x00},
+{0x2a, 0x00},
+
+{0x30, 0x50}, //110126 noise improve//0x30},
+{0x31, 0x38},
+{0x32, 0x42},
+{0x33, 0x60},
+{0x34, 0x70},
+{0x35, 0x80},
+{0x36, 0xa0},
+
+//Out2 th
+{0x40, 0xa0},
+{0x41, 0x40},
+{0x42, 0xa0},
+{0x43, 0x90},
+{0x44, 0x90},
+{0x45, 0x80},
+
+//Out1 th
+{0x46, 0xb0},
+{0x47, 0x55},
+{0x48, 0xa0},
+{0x49, 0x90},
+{0x4a, 0x90},
+{0x4b, 0x80},
+
+//Indoor th
+{0x4c, 0xb0},
+{0x4d, 0x40},
+{0x4e, 0xB0},
+{0x4f, 0xB0},
+{0x50, 0xC0},
+{0x51, 0x90},//80
+
+//Dark1 th
+{0x52, 0xb0}, //0xb0
+{0x53, 0x60}, //0x60
+{0x54, 0xc0}, //0xc0
+{0x55, 0xc0}, //0xc0
+{0x56, 0xb0}, //0xc0
+{0x57, 0x70}, //0x80
+
+//Dark2 th
+{0x58, 0x90}, //0x90
+{0x59, 0x40}, //0x40
+{0x5a, 0xd0}, //0xd0
+{0x5b, 0xd0}, //0xd0
+{0x5c, 0xc0}, //0xe0
+{0x5d, 0x70}, //0x80
+
+//Dark3 th
+{0x5e, 0x88},
+{0x5f, 0x40},
+{0x60, 0xe0},
+{0x61, 0xe0},
+{0x62, 0xe0},
+{0x63, 0x80},
+
+{0x70, 0x15},
+{0x71, 0x01}, //Don't Touch register
+
+{0x72, 0x18},
+{0x73, 0x01}, //Don't Touch register
+
+{0x74, 0x25},
+{0x75, 0x15},
+
+{0x80, 0x20},
+{0x81, 0x40},
+{0x82, 0x65},
+{0x85, 0x1a},
+{0x88, 0x00},
+{0x89, 0x00},
+{0x90, 0x5d}, //For capture
+
+//Dont Touch register
+{0xD0, 0x0c},
+{0xD1, 0x80},
+{0xD2, 0x67},
+{0xD3, 0x00},
+{0xD4, 0x00},
+{0xD5, 0x02},
+{0xD6, 0xff},
+{0xD7, 0x18},
+//End
+{0x3b, 0x06},
+{0x3c, 0x06},
+
+{0xc5, 0x00},//55->48
+{0xc6, 0x00},//48->40
+
+/////// PAGE 13 START ///////
+{0x03, 0x13},
+//Edge
+{0x10, 0xab}, //110126 noise improve//0xcb},
+{0x11, 0x7b},
+{0x12, 0x06}, //Mean
+{0x14, 0x00},
+
+{0x20, 0x15},
+{0x21, 0x13},
+{0x22, 0x33},
+{0x23, 0x04}, //110126 noise improve//0x05},
+{0x24, 0x09},
+{0x25, 0x08}, //110126 noise improve//
+{0x26, 0x20}, //110126 noise improve//0x18},
+{0x27, 0x30},
+{0x29, 0x12},
+{0x2a, 0x50},
+
+//Low clip th
+{0x2b, 0x04}, //110126 noise improve//0x01}, //Out2 02
+{0x2c, 0x06}, //110126 noise improve//0x01}, //Out1 02
+{0x25, 0x08}, //110126 noise improve//0x06},
+{0x2d, 0x0c},
+{0x2e, 0x12},
+{0x2f, 0x12},
+
+//Out2 Edge
+{0x50, 0x10}, //110126 noise improve//0x18},
+{0x51, 0x14}, //110126 noise improve//0x1c},
+{0x52, 0x12}, //110126 noise improve//0x1b},
+{0x53, 0x0c}, //110126 noise improve//0x15},
+{0x54, 0x0f}, //110126 noise improve//0x18},
+{0x55, 0x0f}, //110126 noise improve//0x15},
+
+//Out1 Edge  
+{0x56, 0x10}, //110126 noise improve//0x18},
+{0x57, 0x13}, //110126 noise improve//0x1c},
+{0x58, 0x12}, //110126 noise improve//0x1b},
+{0x59, 0x0c}, //110126 noise improve//0x15},
+{0x5a, 0x0f}, //110126 noise improve//0x18},
+{0x5b, 0x0f}, //110126 noise improve//0x15},
+
+//Indoor Edge
+{0x5c, 0x0D},
+{0x5d, 0x0A},
+{0x5e, 0x0A},
+{0x5f, 0x0D},
+{0x60, 0x0C},
+{0x61, 0x0B},
+
+//Dark1 Edge
+{0x62, 0x08},
+{0x63, 0x08},
+{0x64, 0x08},
+{0x65, 0x06},
+{0x66, 0x06},
+{0x67, 0x06},
+
+//Dark2 Edge
+{0x68, 0x07},
+{0x69, 0x07},
+{0x6a, 0x07},
+{0x6b, 0x05},
+{0x6c, 0x05},
+{0x6d, 0x05},
+
+//Dark3 Edge
+{0x6e, 0x07},
+{0x6f, 0x07},
+{0x70, 0x07},
+{0x71, 0x05},
+{0x72, 0x05},
+{0x73, 0x05},
+
+//2DY
+{0x80, 0xfd},
+{0x81, 0x1f},
+{0x82, 0x0A}, //differ//0x01
+{0x83, 0x31},
+
+{0x90, 0x05},
+{0x91, 0x05},
+{0x92, 0x33},
+{0x93, 0x30},
+
+{0x94, 0x05}, //110126 noise improve//key//0x13},
+{0x95, 0x18}, //110126 noise improve//key//0x54},
+
+{0x97, 0x30}, //110126 noise improve//0x20},
+{0x99, 0x35}, //110126 noise improve//0x20},
+
+{0xa0, 0x01},
+{0xa1, 0x02},
+{0xa2, 0x01},
+{0xa3, 0x02},
+
+{0xa4, 0x01},
+{0xa5, 0x01},
+
+{0xa6, 0x07},
+{0xa7, 0x08},
+{0xa8, 0x07},
+{0xa9, 0x08},
+{0xaa, 0x07},
+{0xab, 0x08},
+
+//Out2 
+{0xb0, 0x22},
+{0xb1, 0x2a},
+{0xb2, 0x28},
+{0xb3, 0x22},
+{0xb4, 0x2a},
+{0xb5, 0x28},
+
+//Out1 
+{0xb6, 0x22},
+{0xb7, 0x2a},
+{0xb8, 0x28},
+{0xb9, 0x22},
+{0xba, 0x2a},
+{0xbb, 0x28},
+
+//Indoor 
+{0xbc, 0x55},
+{0xbd, 0x5a},
+{0xbe, 0x57},
+{0xbf, 0x55},
+{0xc0, 0x5a},
+{0xc1, 0x57},
+
+//Dark1
+{0xc2, 0x1e},
+{0xc3, 0x24},
+{0xc4, 0x20},
+{0xc5, 0x1e},
+{0xc6, 0x24},
+{0xc7, 0x20},
+
+//Dark2
+{0xc8, 0x18},
+{0xc9, 0x20},
+{0xca, 0x1e},
+{0xcb, 0x18},
+{0xcc, 0x20},
+{0xcd, 0x1e},
+
+//Dark3 
+{0xce, 0x18},
+{0xcf, 0x20},
+{0xd0, 0x1e},
+{0xd1, 0x18},
+{0xd2, 0x20},
+{0xd3, 0x1e},
+
+/////// PAGE 14 START ///////
+{0x03, 0x14},
+{0x10, 0x11},
+{0x14, 0x80}, // GX
+{0x15, 0x80}, // GY
+{0x16, 0x80}, // RX
+{0x17, 0x80}, // RY
+{0x18, 0x80}, // BX
+{0x19, 0x80}, // BY
+{0x20, 0x80}, //X 60 //a0
+{0x21, 0x80}, //Y
+{0x22, 0x80},
+{0x23, 0x80},
+{0x24, 0x80},
+{0x30, 0xb8}, //110126 noise improve//0xc8},
+{0x31, 0x2b},
+{0x32, 0x0c}, //110126 noise improve//0x0 0},
+{0x33, 0x00},
+{0x34, 0x90},
+ 
+{0x40, 0x6B},//79}, //31
+{0x50, 0x4C},//5a}, //23 //32
+{0x60, 0x49},//50}, //1a //27
+{0x70, 0x4C},//5A}, //23 //32
+ 
+/////// PAGE 15 START ///////
+{0x03, 0x15},
+{0x10, 0x0f},
+
+//Rstep H 16
+//Rstep L 14
+{0x14, 0x42}, //CMCOFSGH_Day //4c
+{0x15, 0x32}, //CMCOFSGM_CWF //3c
+{0x16, 0x24}, //CMCOFSGL_A //2e
+{0x17, 0x2f}, //CMC SIGN
+
+//CMC_Default_CWF
+{0x30, 0x8f},
+{0x31, 0x59},
+{0x32, 0x0a},
+{0x33, 0x17},
+{0x34, 0x5e},
+{0x35, 0x08},
+{0x36, 0x0e},
+{0x37, 0x38},
+{0x38, 0x87},
+
+//CMC OFS L_A
+{0x40, 0x92},
+{0x41, 0x1b},
+{0x42, 0x89},
+{0x43, 0x81},
+{0x44, 0x00},
+{0x45, 0x01},
+{0x46, 0x89},
+{0x47, 0x9e},
+{0x48, 0x28},
+
+//CMC POFS H_DAY
+{0x50, 0x02},
+{0x51, 0x82},
+{0x52, 0x00},
+{0x53, 0x07},
+{0x54, 0x11},
+{0x55, 0x98},
+{0x56, 0x00},
+{0x57, 0x0b},
+{0x58, 0x8b},
+
+{0x80, 0x03},
+{0x85, 0x40},
+{0x87, 0x02},
+{0x88, 0x00},
+{0x89, 0x00},
+{0x8a, 0x00},
+
+/////// PAGE 16 START ///////
+{0x03,0x16},
+{0x10,0x31},
+{0x18,0x5e},
+{0x19,0x5d},
+{0x1a,0x0e},
+{0x1b,0x01},
+{0x1c,0xdc},
+{0x1d,0xfe}, 
+//GMA Default 
+{0x30, 0x04},
+{0x31, 0x0e},
+{0x32, 0x25},
+{0x33, 0x4C}, //4D
+{0x34, 0x70},
+{0x35, 0x84},
+{0x36, 0x96},
+{0x37, 0xa6},
+{0x38, 0xb3},
+{0x39, 0xc0},
+{0x3a, 0xca},
+{0x3b, 0xd5},
+{0x3c, 0xde},
+{0x3d, 0xe5},
+{0x3e, 0xeb},
+{0x3f, 0xf0},
+{0x40, 0xf5},
+{0x41, 0xfa},
+{0x42, 0xff},                  
+ 
+{0x50,0x04}, 
+{0x51,0x0e},
+{0x52,0x25},
+{0x53,0x4C},
+{0x54,0x70},
+{0x55,0x84},
+{0x56,0x96},
+{0x57,0xa6},
+{0x58,0xb3},
+{0x59,0xc0},
+{0x5a,0xca},
+{0x5b,0xd5},
+{0x5c,0xde},
+{0x5d,0xe5},
+{0x5e,0xeb},
+{0x5f,0xf0},
+{0x60,0xf5},
+{0x61,0xfa},
+{0x62,0xff},
+
+{0x70,0x04}, //GMA
+{0x71,0x0e},
+{0x72,0x25},
+{0x73,0x4C},
+{0x74,0x70},
+{0x75,0x84},
+{0x76,0x96},
+{0x77,0xa6},
+{0x78,0xb3},
+{0x79,0xc0},
+{0x7a,0xca},
+{0x7b,0xd5},
+{0x7c,0xde},
+{0x7d,0xe5},
+{0x7e,0xeb},
+{0x7f,0xf0},
+{0x80,0xf5},
+{0x81,0xfa},
+{0x82,0xff},
+/////// PAGE 17 START ///////
+{0x03, 0x17},
+{0x10, 0xf7},
+
+/////// PAGE 20 START ///////
+{0x03, 0x20},
+{0x11, 0x1c},
+{0x18, 0x30},
+{0x1a, 0x08},
+{0x20, 0x01}, //05_lowtemp Y Mean off
+{0x21, 0x30},
+{0x22, 0x10},
+{0x23, 0x00},
+{0x24, 0x00}, //Uniform Scene Off
+
+{0x28, 0xe7},
+{0x29, 0x0d}, //20100305 ad->0d
+{0x2a, 0xff},
+{0x2b, 0x34}, //f4->Adaptive on //04 off
+
+{0x2c, 0xc2},
+{0x2d, 0xcf},  //fe->AE Speed option
+{0x2e, 0x33},
+{0x30, 0x78}, //f8
+{0x32, 0x03},
+{0x33, 0x2e},
+{0x34, 0x30},
+{0x35, 0xd4},
+{0x36, 0xfe},
+{0x37, 0x32},
+{0x38, 0x04},
+
+{0x39, 0x22}, //AE_escapeC10
+{0x3a, 0xde}, //AE_escapeC11
+
+{0x3b, 0x22}, //AE_escapeC1
+{0x3c, 0xde}, //AE_escapeC2
+
+{0x50, 0x45},
+{0x51, 0x88},
+
+{0x56, 0x03},
+{0x57, 0xf7},
+{0x58, 0x14},
+{0x59, 0x88},
+{0x5a, 0x04},
+
+{0x60, 0x55}, // AEWGT1
+{0x61, 0x55}, // AEWGT2
+{0x62, 0x55}, // AEWGT3
+{0x63, 0x55}, // AEWGT4
+{0x64, 0x5A}, // AEWGT5
+{0x65, 0xA5}, // AEWGT6
+{0x66, 0x5A}, // AEWGT7
+{0x67, 0xA5}, // AEWGT8
+{0x68, 0x5A}, // AEWGT9
+{0x69, 0xA5}, // AEWGT10
+{0x6a, 0x5A}, // AEWGT11
+{0x6b, 0xA5}, // AEWGT12
+{0x6c, 0x55}, // AEWGT13
+{0x6d, 0x55}, // AEWGT14
+{0x6e, 0x55}, // AEWGT15
+{0x6f, 0x55}, // AEWGT16
+
+{0x70, 0x76}, //6e
+{0x71, 0x89}, //00 //-4
+
+// haunting control
+{0x76, 0x43},
+{0x77, 0xe2}, //04 //f2
+{0x78, 0x23}, //Yth1
+{0x79, 0x46}, //Yth2 //46
+{0x7a, 0x23}, //23
+{0x7b, 0x22}, //22
+{0x7d, 0x23},
+
+{0x83, 0x01}, //EXP Normal 33.33 fps 
+{0x84, 0x5f}, 
+{0x85, 0x00}, 
+
+{0x86, 0x02}, //EXPMin 5859.38 fps
+{0x87, 0x00}, 
+
+{0x88, 0x04}, //EXP Max 10.00 fps 
+{0x89, 0x92}, 
+{0x8a, 0x00}, 
+
+//{0x88, 0x07}, //EXP Max 6.25 fps 
+//{0x89, 0x50}, 
+//{0x8a, 0x00}, 
+
+{0x8B, 0x75}, //EXP100 
+{0x8C, 0x00}, 
+{0x8D, 0x61}, //EXP120 
+{0x8E, 0x00}, 
+
+{0x9c, 0x18}, //EXP Limit 488.28 fps 
+{0x9d, 0x00}, 
+{0x9e, 0x02}, //EXP Unit 
+{0x9f, 0x00}, 
+
+//AE_Middle Time option
+//{0xa0, 0x03},
+//{0xa1, 0xa9},
+//{0xa2, 0x80},
+
+{0xb0, 0x18},
+{0xb1, 0x14}, //ADC 400->560
+{0xb2, 0xa0},
+{0xb3, 0x18},
+{0xb4, 0x1a},
+{0xb5, 0x44},
+{0xb6, 0x2f},
+{0xb7, 0x28},
+{0xb8, 0x25},
+{0xb9, 0x22},
+{0xba, 0x21},
+{0xbb, 0x20},
+{0xbc, 0x1f},
+{0xbd, 0x1f},
+
+    //AE_Adaptive Time option
+{0xc0, 0x14},
+{0xc1, 0x1f},
+{0xc2, 0x1f},
+{0xc3, 0x18}, //2b
+{0xc4, 0x10}, //08
+
+{0xc8, 0x80},
+{0xc9, 0x40},
+
+/////// PAGE 22 START ///////
+{0x03, 0x22},
+{0x10, 0xfd},
+{0x11, 0x2e},
+{0x19, 0x01}, // Low On //
+{0x20, 0x30},
+{0x21, 0x80},
+{0x24, 0x01},
+//{0x25, 0x00}, //7f New Lock Cond & New light stable
+
+{0x30, 0x80},
+{0x31, 0x80},//80
+{0x38, 0x11},
+{0x39, 0x34},
+ 
+{0x40, 0xf4},
+{0x41, 0x55}, //44
+{0x42, 0x55}, //43
+ 
+{0x43, 0xf6},
+{0x44, 0x77}, //44
+{0x45, 0x88}, //33
+
+{0x46, 0x00},
+{0x50, 0xb2},
+{0x51, 0x81},
+{0x52, 0x98},
+
+{0x80, 0x3E}, //3e
+{0x81, 0x20},
+{0x82, 0x38},
+
+{0x83, 0x5e}, //5e
+{0x84, 0x1c}, //24 1e
+{0x85, 0x5e}, //54 //56 //5a
+{0x86, 0x22}, //24 //22
+
+{0x87, 0x49},
+{0x88, 0x39},
+{0x89, 0x37}, //38
+{0x8a, 0x28}, //2a
+
+{0x8b, 0x47}, //47
+{0x8c, 0x39}, 
+{0x8d, 0x34}, 
+{0x8e, 0x28}, //2c
+
+{0x8f, 0x54}, //4e
+{0x90, 0x50}, //4d
+{0x91, 0x4E}, //4c
+{0x92, 0x48}, //4a
+{0x93, 0x41}, //46
+{0x94, 0x38},
+{0x95, 0x30},
+{0x96, 0x2C},
+{0x97, 0x28},
+{0x98, 0x22},
+{0x99, 0x20},
+{0x9a, 0x20},
+
+{0x9b, 0x77},
+{0x9c, 0x77},
+{0x9d, 0x48},
+{0x9e, 0x38},
+{0x9f, 0x30},
+
+{0xa0, 0x60},
+{0xa1, 0x34},
+{0xa2, 0x6f},
+{0xa3, 0xff},
+
+{0xa4, 0x14}, //1500fps
+{0xa5, 0x2c}, // 700fps
+{0xa6, 0xcf},
+
+{0xad, 0x3F},
+{0xae, 0x44},
+
+{0xaf, 0x28},  // low temp Rgain
+{0xb0, 0x26},  // low temp Rgain
+
+{0xb1, 0x00}, //0x20 -> 0x00 0405 modify
+{0xb4, 0xea},
+{0xb8, 0x31}, //a2: b-2, R+2  //b4 B-3, R+4 lowtemp
+{0xb9, 0x5E},
+
+/////// PAGE 20 ///////
+{0x03, 0x20},
+{0x10, 0x8c},
+
+// PAGE 20
+{0x03, 0x20}, //page 20
+{0x10, 0x9c}, //ae off
+
+// PAGE 22
+{0x03, 0x22}, //page 22
+{0x10, 0xe9}, //awb off
+
+// PAGE 0
+{0x03, 0x00},
+{0x0e, 0x03}, //PLL On
+{0x0e, 0x73}, //PLLx2
+
+{0x03, 0x00}, // Dummy 750us
+{0x03, 0x00},
+{0x03, 0x00},
+{0x03, 0x00},
+{0x03, 0x00},
+{0x03, 0x00},
+{0x03, 0x00},
+{0x03, 0x00},
+{0x03, 0x00},
+{0x03, 0x00},
+
+{0x03, 0x00}, // Page 0
+{0x01, 0xf0}, //0xf8}, // Sleep Off
+};
+static struct hi253_i2c_reg_conf hi253_svga_config[] =
+{
+{0x01, 0xf1},
+{0x03, 0x00},
+{0x10, 0x11}, // Sub1/2_Preview2 Mode_H binning 19
+//{0x01, 0xf0},
+//zhanghua add dummy begin
+{0x03, 0x00}, // Dummy 750us
+{0x03, 0x00},
+{0x03, 0x00},
+{0x03, 0x00},
+{0x03, 0x00},
+{0x03, 0x00},
+{0x03, 0x00},
+{0x03, 0x00},
+{0x03, 0x00},
+{0x03, 0x00},
+//zhanghua add dummy end
+
+{0x03, 0x20},//Page 20                                                                          
+{0x10, 0x0c},//AE OFF                                                  
+{0x03, 0x22},//Page 22                                                 
+{0x10, 0x69},//AWB OFF 
+
+{0x03,0x11},
+{0x3e,0xa0}, //for preview // 0x80 for capture
+{0x44,0xa0}, //for preview // 0x80 for capture
+{0x55,0x17}, //for preview // 0x0d for capture
+{0x5b,0x00}, //for preview // 0x3f for capture
+{0x62,0x60}, //for preview // 0x10 for capture
+{0x03,0x12},
+{0x25,0x00}, //for preview // 0x30 for capture
+{0x30,0x50}, //for preview // 0x30 for capture
+{0x31,0x18}, //for preview // 0x38 for capture
+{0x32,0x32}, //for preview // 0x42 for capture
+{0x33,0x40}, //for preview // 0x60 for capture
+{0x34,0x50}, //for preview // 0x70 for capture
+{0x35,0x70}, //for preview // 0x80 for capture
+{0x4e,0x90}, //for preview // 0xb0 for capture
+{0x4f,0x90}, //for preview // 0xb0 for capture
+{0x50,0xa0}, //for preview // 0xc0 for capture   
+
+{0x03,0x13},
+{0x12,0x07}, //for preview // 0x06 for capture
+{0x5c,0x0b}, //for preview // 0x0d for capture
+{0x5d,0x0c}, //for preview // 0x0a for capture
+{0x5f,0x08}, //for preview // 0x0d for capture
+{0x60,0x09}, //for preview // 0x0c for capture
+{0x61,0x08}, //for preview // 0x0b for capture
+{0x82,0x05}, //for preview // 0x0a for capture
+{0x94,0x03}, //for preview // 0x13 for capture
+{0x95,0x14}, //for preview // 0x54 for capture
+{0xa4,0x05}, //for preview // 0x01 for capture
+{0xa5,0x05}, //for preview // 0x01 for capture
+{0xbc,0x25}, //for preview // 0x55 for capture
+{0xbd,0x2a}, //for preview // 0x5a for capture
+{0xbe,0x27}, //for preview // 0x57 for capture
+{0xbf,0x25}, //for preview // 0x55 for capture
+{0xc0,0x2a}, //for preview // 0x5a for capture
+{0xc1,0x27}, //for preview // 0x57 for capture
+{0x03,0x13},
+{0x80,0x00}, //edge off    
+{0x03,0x20},
+//{0x18,0x38}, 
+{0x2a,0xff},                                                          
+{0x2b,0x34},                                                          
+{0x2c,0xc2},                                                          
+{0x30,0x78},                                                                                                                               
+{0x88, 0x04},                                                          
+{0x89, 0x92},                                                          
+{0x8a, 0x00},                  
+{0x03,0x20},         
+{0x10,0x9c}, //AE ON 
+{0x03,0x22},         
+{0x10,0xeb}, //AWB ON
+
+{0x03, 0x00},
+{0x01, 0xf0},
+
+};
+
+static struct hi253_i2c_reg_conf hi253_uxga_config[] =
+{
+//zhanghua add for snapshot
+{0x01, 0xf1},
+{0x03, 0x00},
+{0x10, 0x00},	//1600x1200 VSYNC h 08
+
+// for capture setting
+{0x03,0x11},
+{0x3e,0x80}, //for capture
+{0x44,0x80}, //for capture
+{0x55,0x0d}, //for capture
+{0x5b,0x3f}, //for capture
+{0x62,0x10}, //for capture
+
+{0x03,0x12},
+{0x25,0x30}, //for capture
+{0x30,0x50}, //110126 noise improve//0x30}, //for capture
+{0x31,0x38}, //for capture
+{0x32,0x42}, //for capture
+{0x33,0x60}, //for capture
+{0x34,0x70}, //for capture
+{0x35,0x80}, //for capture
+{0x4e,0xb0}, //for capture
+{0x4f,0xb0}, //for capture
+{0x50,0xc0}, //for capture
+	
+{0x03,0x13},
+{0x12,0x06}, //for capture
+{0x5c,0x0d}, //for capture
+{0x5d,0x0a}, //for capture
+{0x5f,0x0d}, //for capture
+{0x60,0x0c}, //for capture
+{0x61,0x0b}, //for capture
+{0x82,0x0a}, //for capture
+{0x94,0x05}, //110126 noise improve//0x13}, //for capture
+{0x95,0x18}, //110126 noise improve//0x54}, //for capture
+{0xa4,0x01}, //for capture
+{0xa5,0x01}, //for capture
+{0xbc,0x55}, //for capture
+{0xbd,0x5a}, //for capture
+{0xbe,0x57}, //for capture
+{0xbf,0x55}, //for capture
+{0xc0,0x5a}, //for capture
+{0xc1,0x57}, //for capture
+
+//{0x03,0x13},
+//{0x80,0xfd}, //edge on             	        
+{0x01, 0xf0},
+};
+
+
+static struct hi253_i2c_reg_conf hi253_effect_off_reg_config[] =
+{
+       {0x03, 0x10},
+	{0x11, 0x03},
+	{0x12, 0x30},
+	{0x13, 0x02},
+	{0x44, 0x80},
+	{0x45, 0x80},
+	{0x03, 0x20},
+	{0x10, 0x9c},
+	
+};
+
+static struct hi253_i2c_reg_conf hi253_effect_mono_reg_config[] =
+{
+	{0x03, 0x10},
+	{0x11, 0x03},
+	{0x12, 0x03},
+	{0x13, 0x02},
+	{0x40, 0x00},
+	{0x44, 0x80},
+	{0x45, 0x80},
+	{0x03, 0x20},
+	{0x10, 0x9c},
+	{0xb0, 0x20},
+	{0x03, 0x22},
+	{0x10, 0xE9},
+};
+
+static struct hi253_i2c_reg_conf hi253_effect_negative_reg_config[] =
+{
+	{0x03, 0x10},
+	{0x11, 0x03},
+	{0x12, 0x08},
+	{0x13, 0x02},
+	{0x14, 0x00},
+	{0x03, 0x20},
+	{0x10, 0x9c},
+	{0xb0, 0x20},
+	{0x03, 0x22},
+	{0x10, 0xE9},
+};
+
+static struct hi253_i2c_reg_conf hi253_effect_solarize_reg_config[] =
+{
+	{0x03, 0x10},
+	{0x11, 0x0b},
+	{0x12, 0x30},
+	{0x13, 0x00},
+	{0x44, 0x80},
+	{0x45, 0x80},
+	{0x46, 0x7d},
+
+};
+
+static struct hi253_i2c_reg_conf hi253_effect_sepia_reg_config[] =
+{
+	{0x03, 0x10},
+	{0x11, 0x03},
+	{0x12, 0x33},
+	{0x13, 0x02},
+	{0x44, 0x54},
+	{0x45, 0x9A},
+	{0x03, 0x20},
+	{0x10, 0x9c},
+	{0xb0, 0x20},
+	{0x03, 0x22},
+	{0x10, 0xE9},
+};
+
+static struct hi253_i2c_reg_conf hi253_effect_aqua_reg_config[] =
+{
+	{0x03, 0x10},
+	{0x11, 0x03},
+	{0x12, 0x03},
+	{0x40, 0x00},
+	{0x13, 0x02},
+	{0x44, 0x63},
+	{0x45, 0x67},
+	{0x03, 0x20},
+	{0x10, 0x9c},
+	{0xb0, 0x20},
+	{0x03, 0x22},
+	{0x10, 0xE9},
+};
+//awb
+static struct hi253_i2c_reg_conf hi253_awb_auto_reg_config[] =
+{
+	{0x03, 0x22},
+	{0x11, 0x2e},
+	{0x80, 0x3e}, 
+	{0x81, 0x20},
+	{0x82, 0x38},	
+	{0x83, 0x5e},
+	{0x84, 0x1c},//1e
+	{0x85, 0x5e},
+	{0x86, 0x22},
+};
+
+static struct hi253_i2c_reg_conf hi253_awb_incandescent_reg_config[] =
+{
+	{0x03, 0x22},
+	{0x11, 0x28},		  
+	{0x80, 0x26},
+	{0x81, 0x20},
+	{0x82, 0x54},
+	{0x83, 0x2e},
+	{0x84, 0x24},
+	{0x85, 0x56},
+	{0x86, 0x50},
+};
+static struct hi253_i2c_reg_conf hi253_awb_fluorescent_reg_config[] =
+{
+       {0x03, 0x22},
+	{0x80, 0x27},
+	{0x81, 0x20},
+	{0x82, 0x42},
+	{0x83, 0x2a},
+	{0x84, 0x24},
+	{0x85, 0x45},
+	{0x86, 0x42},
+};
+static struct hi253_i2c_reg_conf hi253_awb_daylight_reg_config[] =
+{
+	{0x03, 0x22},
+	{0x11, 0x28},		  
+	{0x80, 0x48},
+	{0x81, 0x20},
+	{0x82, 0x2b},
+	{0x83, 0x4c},
+	{0x84, 0x45},
+	{0x85, 0x2c},
+	{0x86, 0x2a},
+};
+static struct hi253_i2c_reg_conf hi253_awb_cloudy_daylight_reg_config[] =
+{
+	{0x03, 0x22},
+	{0x11, 0x28},
+	{0x80, 0x49},
+	{0x81, 0x20},
+	{0x82, 0x24},
+	{0x83, 0x50},
+	{0x84, 0x45},
+	{0x85, 0x24},
+	{0x86, 0x1e},
+};
+
+static struct hi253_i2c_reg_conf hi253_awb_shade_reg_config[] =
+{
+	{0x03, 0x22},
+	{0x11, 0x28},
+	{0x80, 0x49},
+	{0x81, 0x20},
+	{0x82, 0x24},
+	{0x83, 0x50},
+	{0x84, 0x45},
+	{0x85, 0x24},
+	{0x86, 0x1e},
+};
+static struct  hi253_work_t *hi253sensorw = NULL;
+
+static struct  i2c_client *hi253_client = NULL;
+static struct hi253_ctrl_t *hi253_ctrl = NULL;
+
+static DECLARE_WAIT_QUEUE_HEAD(hi253_wait_queue);
+DECLARE_MUTEX(hi253_sem);
+
+static int hi253_i2c_rxdata(unsigned short saddr,
+	unsigned char *rxdata, int length)
+{
+	struct i2c_msg msgs[] = {
+	{
+		.addr   = saddr,
+		.flags = 0,
+		.len   = 2,
+		.buf   = rxdata,
+	},
+	{
+		.addr  = saddr,
+		.flags = I2C_M_RD,
+		.len   = length,
+		.buf   = rxdata,
+	},
+	};
+
+	if (i2c_transfer(hi253_client->adapter, msgs, 2) < 0) {
+		CDBG("hi253_i2c_rxdata failed!\n");
+		return -EIO;
+	}
+
+	return 0;
+}
+static int32_t hi253_i2c_read_w(unsigned char raddr, unsigned char *rdata)
+{
+    unsigned char buf;
+
+    struct i2c_msg msgs[] = 
+    {
+    	{
+    		.addr   = hi253_client->addr,
+    		.flags = 0,
+    		.len   = 1,
+    		.buf   = &buf,
+    	},
+    	{
+    		.addr  = hi253_client->addr,
+    		.flags = I2C_M_RD,
+    		.len   = 1,
+    		.buf   = &buf,
+    	},
+	};
+    
+    buf = raddr;
+    
+	if (i2c_transfer(hi253_client->adapter, msgs, 2) < 0) {
+		CDBG("ov7690_i2c_read failed!\n");
+		return -EIO;
+	}
+    
+    *rdata = buf;
+    
+	return 0;
+
+}
+static int32_t hi253_i2c_txdata(unsigned short saddr,
+	unsigned char *txdata, int length)
+{
+	struct i2c_msg msg[] = {
+	{
+		.addr = saddr,
+		.flags = 0,
+		.len = length,
+		.buf = txdata,
+	},
+	};
+
+	if (i2c_transfer(hi253_client->adapter, msg, 1) < 0) {
+		CDBG("hi253_i2c_txdata faild\n");
+		return -EIO;
+	}
+
+	return 0;
+}
+
+static int32_t hi253_i2c_write_w(unsigned char waddr, unsigned char wdata)
+{
+	
+	unsigned char buf[2];
+	buf[0] = waddr;
+	buf[1] = wdata;
+	if (hi253_i2c_txdata(hi253_client->addr, buf, 2) < 0) {
+		CDBG("hi253_client_i2c_write faild\n");
+		return -EIO;
+	}
+	
+	return 0;
+}
+
+static int32_t hi253_i2c_write_w_table(
+	struct hi253_i2c_reg_conf const *reg_conf_tbl,
+	int num_of_items_in_table)
+{
+	int i;
+	int32_t rc = -EFAULT;
+
+	for (i = 0; i < num_of_items_in_table; i++) {
+		rc = hi253_i2c_write_w(reg_conf_tbl->waddr, reg_conf_tbl->wdata);
+		if (rc < 0)
+			break;
+		reg_conf_tbl++;
+	}
+
+	return rc;
+}
+
+int32_t hi253_set_default_focus(uint8_t af_step)
+{
+    int32_t rc = 0;
+
+    return rc;
+}
+
+int32_t hi253_set_effect(int32_t effect)
+{
+	struct hi253_i2c_reg_conf const *reg_conf_tbl = NULL;
+       int num_of_items_in_table = 0;
+	long rc = 0;
+      CDBG("hi253_set_effect: effect = %d\n", effect);
+	switch (effect) {
+	case CAMERA_EFFECT_OFF:
+        reg_conf_tbl = hi253_effect_off_reg_config;
+        num_of_items_in_table = HI253_ARRAY_SIZE(hi253_effect_off_reg_config);
+        break;
+
+	case CAMERA_EFFECT_MONO:
+        reg_conf_tbl = hi253_effect_mono_reg_config;
+        num_of_items_in_table = HI253_ARRAY_SIZE(hi253_effect_mono_reg_config);
+		break;
+
+	case CAMERA_EFFECT_NEGATIVE:
+        reg_conf_tbl = hi253_effect_negative_reg_config;
+        num_of_items_in_table = HI253_ARRAY_SIZE(hi253_effect_negative_reg_config);
+		break;
+
+	case CAMERA_EFFECT_SOLARIZE:
+        reg_conf_tbl = hi253_effect_solarize_reg_config;
+        num_of_items_in_table = HI253_ARRAY_SIZE(hi253_effect_solarize_reg_config);
+		break;
+
+	case CAMERA_EFFECT_SEPIA:
+        reg_conf_tbl = hi253_effect_sepia_reg_config;
+        num_of_items_in_table = HI253_ARRAY_SIZE(hi253_effect_sepia_reg_config);
+		break;
+        
+	case CAMERA_EFFECT_AQUA:
+        reg_conf_tbl = hi253_effect_aqua_reg_config;
+        num_of_items_in_table = HI253_ARRAY_SIZE(hi253_effect_aqua_reg_config);
+		break;
+              
+	default: 
+		return 0;
+	}
+
+    rc = hi253_i2c_write_w_table(reg_conf_tbl, num_of_items_in_table);
+    return rc;
+
+}
+
+static long hi253_set_wb(int wb)
+{
+       struct hi253_i2c_reg_conf const *reg_wb_tbl = NULL;
+       int num_items_in_table = 0;
+	long rc = 0;
+       CDBG("hi253_set_wb: wb = %d\n", wb);
+	switch (wb) {
+	case CAMERA_WB_AUTO:
+        reg_wb_tbl = hi253_awb_auto_reg_config;
+        num_items_in_table = HI253_ARRAY_SIZE(hi253_awb_auto_reg_config);
+        break;
+		 
+
+	case CAMERA_WB_INCANDESCENT:
+        reg_wb_tbl = hi253_awb_incandescent_reg_config;
+        num_items_in_table = HI253_ARRAY_SIZE(hi253_awb_incandescent_reg_config);
+		break;
+        
+	case CAMERA_WB_CUSTOM:
+	case CAMERA_WB_FLUORESCENT:
+        reg_wb_tbl = hi253_awb_fluorescent_reg_config;
+        num_items_in_table = HI253_ARRAY_SIZE(hi253_awb_fluorescent_reg_config);
+		break;
+        
+	case CAMERA_WB_DAYLIGHT:
+        reg_wb_tbl = hi253_awb_daylight_reg_config;
+        num_items_in_table = HI253_ARRAY_SIZE(hi253_awb_daylight_reg_config);
+		break;
+        
+	case CAMERA_WB_CLOUDY_DAYLIGHT:
+        reg_wb_tbl = hi253_awb_cloudy_daylight_reg_config;
+        num_items_in_table = HI253_ARRAY_SIZE(hi253_awb_cloudy_daylight_reg_config);
+		break;
+
+        
+	case CAMERA_WB_TWILIGHT:
+        return 0;
+		break;  
+
+	case CAMERA_WB_SHADE:
+        reg_wb_tbl = hi253_awb_shade_reg_config;
+        num_items_in_table = HI253_ARRAY_SIZE(hi253_awb_shade_reg_config);
+		break;
+        
+	default: 
+		return 0;
+	}
+	
+    rc = hi253_i2c_write_w_table(reg_wb_tbl, num_items_in_table);
+
+    return rc;
+
+}
+
+int32_t hi253_set_fps(struct fps_cfg    *fps)
+{
+    /* input is new fps in Q8 format */
+    int32_t rc = 0;
+
+    CDBG("hi253_set_fps\n");
+    return rc;
+}
+
+int32_t hi253_write_exp_gain(uint16_t gain, uint32_t line)
+{
+    CDBG("hi253_write_exp_gain\n");
+    return 0;
+}
+
+int32_t hi253_set_pict_exp_gain(uint16_t gain, uint32_t line)
+{
+    int32_t rc = 0;
+
+    CDBG("hi253_set_pict_exp_gain\n");
+
+    mdelay(10);
+
+    /* camera_timed_wait(snapshot_wait*exposure_ratio); */
+    return rc;
+}
+int32_t hi253_setting(enum hi253_reg_update_t rupdate,
+                       enum hi253_setting_t    rt)
+{
+    int32_t rc = 0;
+
+    switch (rupdate)
+    {
+        case UPDATE_PERIODIC:
+            if(rt == RES_PREVIEW)
+            {    
+		   CDBG("hi253_svga_config in\n");
+                 rc = hi253_i2c_write_w_table(hi253_svga_config,
+                            HI253_ARRAY_SIZE(hi253_svga_config));
+                if(rc < 0)
+                {
+                    CDBG("hi253_svga_config fail\n");
+                    return rc;
+                }    
+		
+            }
+            else
+            {
+                CDBG("hi253_uxga_config in\n");
+                rc = hi253_i2c_write_w_table(hi253_uxga_config,
+                            HI253_ARRAY_SIZE(hi253_uxga_config));
+                if(rc < 0)
+                {
+                    CDBG("hi253_uxga_config fail\n");
+                    return rc;
+                }    
+		  msleep(50);
+
+            }
+            break;
+
+        case REG_INIT:
+           
+            rc = hi253_i2c_write_w_table(hi253_init_reg_config_comm,
+                                        HI253_ARRAY_SIZE(hi253_init_reg_config_comm));
+            if(rc < 0)
+            {
+                return rc;
+            }
+        
+            msleep(10);
+            break;
+
+        default:
+            rc = -EFAULT;
+            break;
+    } /* switch (rupdate) */
+
+    return rc;
+}
+
+int32_t hi253_video_config(int mode, int res)
+{
+    int32_t rc;
+
+    switch (res)
+    {
+        case QTR_SIZE:
+            rc = hi253_setting(UPDATE_PERIODIC, RES_PREVIEW);
+            if (rc < 0)
+            {
+                return rc;
+            }
+
+            CDBG("sensor configuration done!\n");
+            break;
+
+        case FULL_SIZE:
+            rc = hi253_setting(UPDATE_PERIODIC, RES_CAPTURE);
+            if (rc < 0)
+            {
+                return rc;
+            }
+
+            break;
+
+        default:
+            return 0;
+    } /* switch */
+
+    hi253_ctrl->prev_res   = res;
+    hi253_ctrl->curr_res   = res;
+    hi253_ctrl->sensormode = mode;
+
+    return rc;
+}
+
+int32_t hi253_snapshot_config(int mode)
+{
+    int32_t rc = 0;
+    CDBG("hi253_snapshot_config in\n");
+    rc = hi253_setting(UPDATE_PERIODIC, RES_CAPTURE);
+    msleep(50);
+    if (rc < 0)
+    {
+        return rc;
+    }
+
+    hi253_ctrl->curr_res = hi253_ctrl->pict_res;
+
+    hi253_ctrl->sensormode = mode;
+
+    return rc;
+}
+
+int32_t hi253_power_down(void)
+{
+    int32_t rc = 0;
+
+    mdelay(5);
+
+    return rc;
+}
+
+int32_t hi253_move_focus(int direction, int32_t num_steps)
+{
+    return 0;
+}
+
+static int hi253_sensor_init_done(const struct msm_camera_sensor_info *data)
+{
+    gpio_direction_output(data->sensor_reset, 0);
+    gpio_free(data->sensor_reset);
+
+	gpio_direction_output(data->sensor_pwd, 1);
+	gpio_free(data->sensor_pwd);
+	msleep(100);
+    if (data->vreg_disable_func)
+    {
+        data->vreg_disable_func(data->sensor_vreg, data->vreg_num);
+    }
+    
+	return 0;
+}
+
+static int hi253_probe_init_sensor(const struct msm_camera_sensor_info *data)
+{
+	int rc;
+	unsigned char chipid;
+
+    //i2c address conficts with Synaptics TM1319 which used in M860 and C8600
+    // actual address 0x20, fake address 0x40
+	//delete c8500 product and u8500 product dividing,because all the products need fake address 0x40
+	if((!machine_is_msm7x25_m860()) && (!machine_is_msm7x25_c8600()))
+    {
+        hi253_client->addr = 0x40 >> 1;
+    }
+	/* pull down power down */
+	rc = gpio_request(data->sensor_pwd, "hi253");
+	if (!rc || rc == -EBUSY)
+		gpio_direction_output(data->sensor_pwd, 1);
+	else 
+        goto init_probe_fail;
+    
+	rc = gpio_request(data->sensor_reset, "hi253");
+	if (!rc) {
+		rc = gpio_direction_output(data->sensor_reset, 0);
+	}
+	else
+		goto init_probe_fail;
+
+    mdelay(5);
+    
+    if (data->vreg_enable_func)
+    {
+        rc = data->vreg_enable_func(data->sensor_vreg, data->vreg_num);
+        if (rc < 0)
+        {
+            goto init_probe_fail;
+        }
+    }
+    
+    msleep(20);
+    
+    if(data->master_init_control_slave == NULL 
+        || data->master_init_control_slave(data) != 0
+        )
+    {
+
+        rc = gpio_direction_output(data->sensor_pwd, 0);
+         if (rc < 0)
+            goto init_probe_fail;
+
+        msleep(20);
+        /*hardware reset*/
+        rc = gpio_direction_output(data->sensor_reset, 1);
+        if (rc < 0)
+            goto init_probe_fail;
+
+        msleep(20);
+    }
+       //hi253 soft reset
+	/*changge the probe function for detect the camera*/
+    rc = hi253_i2c_write_w(0x01, 0xf1);   
+	if(rc < 0)
+	{   
+	    CDBG("hi253_i2c_write_w 0x01 0xf1 !! rc=%d", rc);
+	    goto init_probe_fail;	    
+	}
+
+	/*changge the probe function for detect the camera*/
+    rc = hi253_i2c_write_w(0x01, 0xf3);
+	if(rc < 0)
+	{	    
+	    CDBG("hi253_i2c_write_w 0x01 0xf3 !! rc=%d", rc);
+	    goto init_probe_fail;	    
+	}
+
+	/*changge the probe function for detect the camera*/
+    rc = hi253_i2c_write_w(0x01, 0xf1);
+	if(rc < 0)
+	{	    
+		CDBG("hi253_i2c_write_w 0x01 0xf1 !! rc=%d", rc);
+	    goto init_probe_fail;	    
+	}
+    
+	/* 3. Read sensor Model ID: */
+	rc = hi253_i2c_read_w(HI253_REG_CHIP_ID, &chipid);
+
+	/*changge the probe function for detect the camera*/
+	if (rc < 0)		
+	{
+		CDBG("hi253_i2c_read_w Model_ID failed!! rc=%d", rc);
+		goto init_probe_fail;
+	}		
+
+	CDBG("hi253 chipid = 0x%x\n", chipid);
+
+	if (chipid != HI253_CHIP_ID) 
+    {	
+		rc = -ENODEV;
+		CDBG("hi253 Model_ID error!!");
+		goto init_probe_fail;		
+	}
+
+    goto init_probe_done;
+
+init_probe_fail:
+    hi253_sensor_init_done(data);
+init_probe_done:
+	return rc;
+}
+
+int hi253_sensor_open_init(const struct msm_camera_sensor_info *data)
+{
+	int32_t  rc;
+
+	hi253_ctrl = kzalloc(sizeof(struct hi253_ctrl_t), GFP_KERNEL);
+	if (!hi253_ctrl) {
+		CDBG("hi253_sensor_open_init failed!\n");
+		rc = -ENOMEM;
+		goto init_done;
+	}
+
+	hi253_ctrl->fps_divider = 1 * 0x00000400;
+	hi253_ctrl->pict_fps_divider = 1 * 0x00000400;
+	hi253_ctrl->set_test = TEST_OFF;
+	hi253_ctrl->prev_res = QTR_SIZE;
+	hi253_ctrl->pict_res = FULL_SIZE;
+
+	if (data)
+		hi253_ctrl->sensordata = data;
+
+	/* enable mclk first */
+	msm_camio_clk_rate_set(HI253_DEFAULT_CLOCK_RATE);
+	msleep(20);
+
+	msm_camio_camif_pad_reg_reset();
+	msleep(20);
+
+  rc = hi253_probe_init_sensor(data);
+	if (rc < 0)
+		goto init_fail;
+
+	if (hi253_ctrl->prev_res == QTR_SIZE)
+		rc = hi253_setting(REG_INIT, RES_PREVIEW);
+	else
+		rc = hi253_setting(REG_INIT, RES_CAPTURE);
+
+	if (rc < 0)
+		goto init_fail;
+	else
+		goto init_done;
+
+init_fail:
+	kfree(hi253_ctrl);
+init_done:
+	return rc;
+}
+
+int hi253_init_client(struct i2c_client *client)
+{
+    /* Initialize the MSM_CAMI2C Chip */
+    init_waitqueue_head(&hi253_wait_queue);
+    return 0;
+}
+
+int32_t hi253_set_sensor_mode(int mode, int res)
+{
+    int32_t rc = 0;
+
+    switch (mode)
+    {
+        case SENSOR_PREVIEW_MODE:
+            CDBG("SENSOR_PREVIEW_MODE\n");
+            rc = hi253_video_config(mode, res);
+            break;
+
+        case SENSOR_SNAPSHOT_MODE:
+        case SENSOR_RAW_SNAPSHOT_MODE:
+            CDBG("SENSOR_SNAPSHOT_MODE\n");
+            rc = hi253_snapshot_config(mode);
+            break;
+
+        default:
+            rc = -EINVAL;
+            break;
+    }
+
+    return rc;
+}
+
+
+int hi253_sensor_config(void __user *argp)
+{
+	struct sensor_cfg_data cdata;
+	long   rc = 0;
+
+	if (copy_from_user(&cdata,
+				(void *)argp,
+				sizeof(struct sensor_cfg_data)))
+		return -EFAULT;
+
+	down(&hi253_sem);
+
+  CDBG("hi253_sensor_config: cfgtype = %d\n",
+	  cdata.cfgtype);
+		switch (cdata.cfgtype) {
+		case CFG_GET_PICT_FPS:
+			break;
+
+		case CFG_GET_PREV_L_PF:
+			break;
+
+		case CFG_GET_PREV_P_PL:
+			break;
+
+		case CFG_GET_PICT_L_PF:
+			break;
+
+		case CFG_GET_PICT_P_PL:
+			break;
+
+		case CFG_GET_PICT_MAX_EXP_LC:
+			break;
+
+		case CFG_SET_FPS:
+		case CFG_SET_PICT_FPS:
+			rc = hi253_set_fps(&(cdata.cfg.fps));
+			break;
+
+		case CFG_SET_EXP_GAIN:
+			rc =
+				hi253_write_exp_gain(
+					cdata.cfg.exp_gain.gain,
+					cdata.cfg.exp_gain.line);
+			break;
+
+		case CFG_SET_PICT_EXP_GAIN:
+			rc =
+				hi253_set_pict_exp_gain(
+					cdata.cfg.exp_gain.gain,
+					cdata.cfg.exp_gain.line);
+			break;
+
+		case CFG_SET_MODE:
+			rc = hi253_set_sensor_mode(cdata.mode,
+						cdata.rs);
+			break;
+
+		case CFG_PWR_DOWN:
+			rc = hi253_power_down();
+			break;
+
+		case CFG_MOVE_FOCUS:
+			rc =
+				hi253_move_focus(
+					cdata.cfg.focus.dir,
+					cdata.cfg.focus.steps);
+			break;
+
+		case CFG_SET_DEFAULT_FOCUS:
+			rc =
+				hi253_set_default_focus(
+					cdata.cfg.focus.steps);
+			break;
+
+		case CFG_SET_EFFECT:
+			rc = hi253_set_effect(
+						cdata.cfg.effect);
+			break;
+
+		case CFG_SET_WB:
+			rc = hi253_set_wb(
+						cdata.cfg.effect);
+			break;
+
+		case CFG_MAX:
+            if (copy_to_user((void *)(cdata.cfg.pict_max_exp_lc),
+            		hi253_supported_effect,
+            		HI253_ARRAY_SIZE(hi253_supported_effect)))
+            {
+                CDBG("copy hi253_supported_effect to user fail\n");
+                rc = -EFAULT;
+            }
+            else
+            {
+                rc = 0;
+            }
+			break;
+	
+		default:
+			rc = -EFAULT;
+			break;
+		}
+
+	up(&hi253_sem);
+
+	return rc;
+}
+
+int hi253_sensor_release(void)
+{
+	int rc = -EBADF;
+
+	down(&hi253_sem);
+
+	hi253_power_down();
+
+    hi253_sensor_init_done(hi253_ctrl->sensordata);
+
+	kfree(hi253_ctrl);
+
+	up(&hi253_sem);
+	CDBG("hi253_release completed!\n");
+	return rc;
+}
+
+static int hi253_i2c_probe(struct i2c_client *client,
+	const struct i2c_device_id *id)
+{
+	int rc = 0;
+	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
+		rc = -ENOTSUPP;
+		goto probe_failure;
+	}
+
+	hi253sensorw =
+		kzalloc(sizeof(struct hi253_work_t), GFP_KERNEL);
+
+	if (!hi253sensorw) {
+		rc = -ENOMEM;
+		goto probe_failure;
+	}
+
+	i2c_set_clientdata(client, hi253sensorw);
+	hi253_init_client(client);
+	hi253_client = client;
+	//hi253_client->addr = hi253_client->addr >> 1;
+	msleep(50);
+
+	CDBG("i2c probe ok\n");
+	return 0;
+
+probe_failure:
+	kfree(hi253sensorw);
+	hi253sensorw = NULL;
+	pr_err("i2c probe failure %d\n", rc);
+	return rc;
+}
+
+static const struct i2c_device_id hi253_i2c_id[] = {
+	{ "hi253", 0},
+	{ }
+};
+
+static struct i2c_driver hi253_i2c_driver = {
+	.id_table = hi253_i2c_id,
+	.probe  = hi253_i2c_probe,
+	.remove = __exit_p(hi253_i2c_remove),
+	.driver = {
+		.name = "hi253",
+	},
+};
+
+static int hi253_sensor_probe(
+		const struct msm_camera_sensor_info *info,
+		struct msm_sensor_ctrl *s)
+{
+	/* We expect this driver to match with the i2c device registered
+	 * in the board file immediately. */
+	int rc = i2c_add_driver(&hi253_i2c_driver);
+	if (rc < 0 || hi253_client == NULL) {
+		rc = -ENOTSUPP;
+		goto probe_done;
+	}
+
+	/* enable mclk first */
+	msm_camio_clk_rate_set(HI253_DEFAULT_CLOCK_RATE);
+	msleep(20);
+
+	rc = hi253_probe_init_sensor(info);
+	/*probe failed*/
+	if (rc < 0) {
+		i2c_del_driver(&hi253_i2c_driver);
+		CDBG("camera sensor hi253 probe is failed!!!\n");
+		goto probe_done;
+	}
+	
+	/*probe succeed*/
+	else
+	{
+		CDBG("camera sensor hi253 probe is succeed!!!\n");
+	}
+	s->s_init = hi253_sensor_open_init;
+	s->s_release = hi253_sensor_release;
+	s->s_config  = hi253_sensor_config;
+	hi253_sensor_init_done(info);
+
+	set_camera_support(true);
+
+    #ifdef CONFIG_HUAWEI_HW_DEV_DCT
+    /* detect current device successful, set the flag as present */
+    set_hw_dev_flag(DEV_I2C_CAMERA_MAIN);
+    #endif
+    
+probe_done:
+	return rc;
+}
+
+static int __hi253_probe(struct platform_device *pdev)
+{
+	return msm_camera_drv_start(pdev, hi253_sensor_probe);
+}
+
+static struct platform_driver msm_camera_driver = {
+	.probe = __hi253_probe,
+	.driver = {
+		.name = "msm_camera_hi253",
+		.owner = THIS_MODULE,
+	},
+};
+
+static int __init hi253_init(void)
+{
+	return platform_driver_register(&msm_camera_driver);
+}
+
+module_init(hi253_init);
