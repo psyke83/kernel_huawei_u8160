@@ -15,17 +15,6 @@ config CPU_FREQ
 
 if CPU_FREQ
 
-config CPU_FREQ_MIN_FREQ
-	int "Minimum CPU Frequency"
-	default 245000
-
-config CPU_FREQ_MAX_FREQ
-	int "Maximum CPU Frequency"
-	default 998400
-	help
-	  WARNING: Since not all devices are made equal, do not set this higher
-	  than the stock frequency.
-
 config CPU_FREQ_TABLE
 	tristate
 
@@ -121,108 +110,7 @@ config CPU_FREQ_DEFAULT_GOV_CONSERVATIVE
 	  Be aware that not all cpufreq drivers support the conservative
 	  governor. If unsure have a look at the help section of the
 	  driver. Fallback governor will be the performance governor.
-
-config CPU_FREQ_DEFAULT_GOV_INTERACTIVE
-	bool "interactive"
-	select CPU_FREQ_GOV_INTERACTIVE
-	help
-	 Use the 'interactive' governor as default. This gets full cpu frequency
-	 scaling for workloads that are latency sensitive, typically interactive
-	 workloads..
-config CPU_FREQ_DEFAULT_GOV_SMARTASS
-  bool "smartass"
-  select CPU_FREQ_GOV_SMARTASS
-  select CPU_FREQ_GOV_PERFORMANCE
-  help
-    Use the CPUFreq governor 'smartass' as default.
-
- endchoice
- 
-config CPU_FREQ_GOV_SMARTASS
-  tristate "'smartass' cpufreq governor"
-  depends on CPU_FREQ
-  help
-    'smartass' - a "smart" optimized governor for the hero!
-
-    If in doubt, say N.
-
-config SMARTASS_SLEEP_MAX
-	int "Sleep Max Freq"
-	default 245000
-	depends on CPU_FREQ_GOV_SMARTASS
-	help
-	  When sleep_max_freq>0 the frequency when suspended will be capped
-	  by this frequency. Also will wake up at max frequency of policy
-	  to minimize wakeup issues.
-	  Set sleep_max_freq=0 to disable this behavior.
-
-config SMARTASS_SLEEP_WAKEUP
-	int "Sleep Wakeup Freq"
-	default CPU_FREQ_MAX_FREQ
-	depends on CPU_FREQ_GOV_SMARTASS
-	help
-	  The frequency to set when waking up from sleep.
-	  When sleep_max_freq=0 this will have no effect.
-
-config SMARTASS_DEFAULT_SAMPLE_RATE_JIFFIES
-	int "Default sample rate jiffies"
-	default 2
-	depends on CPU_FREQ_GOV_SMARTASS
-	help
-	  Sampling rate, I highly recommend to leave it at 2.
-
-config SMARTASS_DEFAULT_RAMP_UP_STEP
-	int "Default ramp up step"
-	default 38400
-	depends on CPU_FREQ_GOV_SMARTASS
-	help
-	  Freqeuncy delta when ramping up.
-	  zero disables causes to always jump straight to max frequency.
-
-config SMARTASS_DEFAULT_MAX_RAMP_DOWN
-	int "Default ramp down step"
-	default 38400
-	depends on CPU_FREQ_GOV_SMARTASS
-	help
-	  Max freqeuncy delta when ramping down. zero disables.
-
-config SMARTASS_DEFAULT_IGNORE_STEP_FREQ
-	int "Ignore stepping freq"
-	default 245000
-	depends on CPU_FREQ_GOV_SMARTASS
-	help
-	  Ignore up and down steps at or below this frequency.
-	  Default is 245000
-
-config SMARTASS_DEFAULT_MAX_CPU_LOAD
-	int "Default max cpu load"
-	default 80
-	depends on CPU_FREQ_GOV_SMARTASS
-	help
-	  CPU freq will be increased if measured load > max_cpu_load;
-
-config SMARTASS_DEFAULT_MIN_CPU_LOAD
-	int "Default min cpu load"
-	default 30
-	depends on CPU_FREQ_GOV_SMARTASS
-	help
-	  CPU freq will be decreased if measured load < min_cpu_load;
-
-config SMARTASS_DEFAULT_DOWN_RATE_US
-	int "Default down rate in us"
-	default 45
-	depends on CPU_FREQ_GOV_SMARTASS
-	help
-	  The minimum amount of time to spend at a frequency before we can ramp down,
-	  default is 45ms
-
-config SMARTASS_DEFAULT_UP_MIN_FREQ
-	int "Default up minimum frequency"
-	default CPU_FREQ_MAX_FREQ
-	depends on CPU_FREQ_GOV_SMARTASS
-	help
-	  When ramping up frequency with no idle cycles jump to at least this frequency.
-	  Zero disables. Set a very high value to jump to policy max freqeuncy.
+endchoice
 
 config CPU_FREQ_GOV_PERFORMANCE
 	tristate "'performance' governor"
@@ -279,21 +167,6 @@ config CPU_FREQ_GOV_ONDEMAND
 
 	  If in doubt, say N.
 
-config CPU_FREQ_GOV_ONDEMAND_INPUT
-	bool "Ramp up CPU frequency on input events"
-	default y
-	depends on CPU_FREQ_GOV_ONDEMAND
-	help
-	  Enable installation of an input event handler which will ramp up the
-	  CPU to max frequency when an input event is received.
-
-config CPU_FREQ_GOV_INTERACTIVE
-	tristate "'interactive' cpufreq policy governor"
-	help
-	 'interactive' - This driver adds a dynamic cpufreq policy governor.
-	 Designed for low latency burst workloads. Scaling it done when coming
-	 out of idle instead of polling.
-
 config CPU_FREQ_GOV_CONSERVATIVE
 	tristate "'conservative' cpufreq governor"
 	depends on CPU_FREQ
@@ -316,21 +189,5 @@ config CPU_FREQ_GOV_CONSERVATIVE
 	  For details, take a look at linux/Documentation/cpu-freq.
 
 	  If in doubt, say N.
-
-config CPU_FREQ_VDD_LEVELS
-	bool "CPU Vdd levels sysfs interface"
-	depends on CPU_FREQ_STAT
-	depends on ARCH_QSD8X50
-	default n
-	help
-	  CPU Vdd levels sysfs interface
-
-config CPU_FREQ_VDD_LEVELS_MIN
-	int "Min VDD Level"
-	default 1000
-
-config CPU_FREQ_VDD_LEVELS_MAX
-	int "Max VDD Level"
-	default 1300
 
 endif	# CPU_FREQ
