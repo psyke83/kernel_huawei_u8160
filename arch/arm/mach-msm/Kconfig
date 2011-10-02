@@ -1044,6 +1044,13 @@ config MSM_CPU_FREQ_OVERCLOCK
           Adds a number of overclocked frequencies
           If unsure, choose N.
 
+config MSM_CPU_FREQ_UNDERCLOCK
+        bool "Underclock the CPU frequency"
+        default n
+        help
+          Adds a number of underclocked frequencies
+          If unsure, choose N.
+
 endif # CPU_FREQ_MSM
 
 config MSM_CPU_AVS
