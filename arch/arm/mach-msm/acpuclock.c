@@ -3,7 +3,7 @@
  * MSM architecture clock driver
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2007-2010, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2007-2009, Code Aurora Forum. All rights reserved.
  * Author: San Mehat <san@android.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -16,6 +16,48 @@
  * GNU General Public License for more details.
  *
  */
+
+/*
+ * OverClock and UnderClock author: Stefano Viola aka estebanSannin
+ * email: stefanoviol [@] gmail [.] com
+ * site: http://hacklabproject.org http://dronix.org
+ *
+ * Tanks Francesco Gugliuzza aka JackTheVendicator for "Turbo Force Mode"
+ */
+
+/*
+ *
+ * For enable the frequencies uncomment the line
+ *
+ */
+
+#define UNDERCLOCK_30720
+#define UNDERCLOCK_61440
+//#define UNDERCLOCK_49152
+#define OVERCLOCK_614400
+#define OVERCLOCK_633600
+#define OVERCLOCK_652800
+#define OVERCLOCK_672000
+#define OVERCLOCK_691200
+#define OVERCLOCK_710400
+//#define OVERCLOCK_729600
+//#define OVERCLOCK_748800
+//#define OVERCLOCK_768000
+
+
+/*
+ *  ATTENTION
+ *  TURBO_MODE overclock the generic PLL (PLL_1): BUS RAM, CAM, DISPLAY
+ *  and enable new frequencies:
+ *  352mhz
+ *  528mhz
+ *
+ *  because are generated from generic PLL
+ *
+ */
+
+//#define TURBO_MODE
+
 
 #include <linux/version.h>
 #include <linux/kernel.h>
@@ -38,6 +80,7 @@
 #include "clock.h"
 #include "acpuclock.h"
 #include "socinfo.h"
+
 
 #define A11S_CLK_CNTL_ADDR (MSM_CSR_BASE + 0x100)
 #define A11S_CLK_SEL_ADDR (MSM_CSR_BASE + 0x104)
@@ -175,15 +218,59 @@ static struct clkctl_acpu_speed pll0_196_pll1_960_pll2_1056[] = {
 /* 7x27 normal with GSM capable modem */
 static struct clkctl_acpu_speed pll0_245_pll1_960_pll2_1200[] = {
 	{ 0, 19200, ACPU_PLL_TCXO, 0, 0, 19200, 0, 0, 30720 },
+#ifdef UNDERCLOCK_30720
+	{ 1,  30720, ACPU_PLL_0, 4, 7,  15360, 1, 1,  30720 },
+#endif
+#ifdef UNDERCLOCK_49152
+	{ 1,  49152, ACPU_PLL_0, 4, 4,  24576, 1, 2,  30720 },
+#endif
+#ifdef UNDERCLOCK_61440
+	{ 1,  61440, ACPU_PLL_0, 4, 3,  30720, 1, 2,  30720 },
+#endif
 	{ 0, 120000, ACPU_PLL_1, 1, 7,  60000, 1, 3,  61440 },
 	{ 1, 122880, ACPU_PLL_0, 4, 1,  61440, 1, 3,  61440 },
 	{ 0, 200000, ACPU_PLL_2, 2, 5,  66667, 2, 4,  61440 },
 	{ 1, 245760, ACPU_PLL_0, 4, 0, 122880, 1, 4,  61440 },
+#ifdef TURBO_MODE
+	{ 1, 352000, ACPU_PLL_1, 1, 2, 176000, 1, 5, 122880 },
+#else
 	{ 1, 320000, ACPU_PLL_1, 1, 2, 160000, 1, 5, 122880 },
+#endif
 	{ 0, 400000, ACPU_PLL_2, 2, 2, 133333, 2, 5, 122880 },
-	{ 1, 480000, ACPU_PLL_1, 1, 1, 160000, 2, 6, 122880 },
+#ifdef TURBO_MODE
+	{ 1, 528000, ACPU_PLL_1, 1, 1, 176000, 2, 6, 122880 },
+#else
+	{ 1, 480000, ACPU_PLL_1, 1, 1, 120000, 3, 6, 120000 },
+#endif
 	{ 1, 600000, ACPU_PLL_2, 2, 1, 200000, 2, 7, 122880 },
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, {0, 0, 0} }
+#ifdef OVERCLOCK_614400
+         { 1, 614400, ACPU_PLL_2, 2, 1, 200000, 2, 7, 122880 },
+ #endif
+ #ifdef OVERCLOCK_633600
+         { 1, 633600, ACPU_PLL_2, 2, 1, 200000, 2, 7, 122880 },
+ #endif
+ #ifdef OVERCLOCK_652800
+         { 1, 652800, ACPU_PLL_2, 2, 1, 200000, 2, 7, 122880 },
+ #endif
+ #ifdef OVERCLOCK_672000
+         { 1, 672000, ACPU_PLL_2, 2, 1, 200000, 2, 7, 122880 },
+ #endif
+ #ifdef OVERCLOCK_691200
+         { 1, 691200, ACPU_PLL_2, 2, 1, 200000, 2, 7, 122880 },
+ #endif
+ #ifdef OVERCLOCK_710400
+         { 1, 710400, ACPU_PLL_2, 2, 1, 200000, 2, 7, 122880 },
+ #endif
+ #ifdef OVERCLOCK_729600
+         { 1, 729600, ACPU_PLL_2, 2, 1, 200000, 2, 7, 122880 },
+ #endif
+ #ifdef OVERCLOCK_748800
+        { 1, 748800, ACPU_PLL_2, 2, 1, 200000, 2, 7, 122880 },
+#endif
+#ifdef OVERCLOCK_768000
+		{ 1, 768000, ACPU_PLL_2, 2, 1, 200000, 2, 7, 200000 },
+#endif
+		{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, {0, 0, 0} }
 };
 
 /* 7x27 normal with CDMA-only modem */
@@ -352,16 +439,14 @@ static int pc_pll_request(unsigned id, unsigned on)
  *---------------------------------------------------------------------------*/
 
 #define POWER_COLLAPSE_KHZ 19200
-unsigned long acpuclk_power_collapse(void)
-{
+unsigned long acpuclk_power_collapse(void) {
 	int ret = acpuclk_get_rate(smp_processor_id());
 	acpuclk_set_rate(smp_processor_id(), POWER_COLLAPSE_KHZ, SETRATE_PC);
 	return ret;
 }
 
 #define WAIT_FOR_IRQ_KHZ 128000
-unsigned long acpuclk_wait_for_irq(void)
-{
+unsigned long acpuclk_wait_for_irq(void) {
 	int ret = acpuclk_get_rate(smp_processor_id());
 	acpuclk_set_rate(smp_processor_id(), WAIT_FOR_IRQ_KHZ, SETRATE_SWFI);
 	return ret;
@@ -391,6 +476,8 @@ static int acpuclk_set_vdd_level(int vdd)
 /* Set proper dividers for the given clock speed. */
 static void acpuclk_set_div(const struct clkctl_acpu_speed *hunt_s) {
 	uint32_t reg_clkctl, reg_clksel, clk_div, src_sel;
+	uint32_t a11_div;
+
 
 	reg_clksel = readl(A11S_CLK_SEL_ADDR);
 
@@ -398,6 +485,18 @@ static void acpuclk_set_div(const struct clkctl_acpu_speed *hunt_s) {
 	clk_div = (reg_clksel >> 1) & 0x03;
 	/* CLK_SEL_SRC1NO */
 	src_sel = reg_clksel & 1;
+
+
+	a11_div=hunt_s->a11clk_src_div;
+
+	//estebanSannin OC 
+#define custom_frequency 537600
+	if(hunt_s->a11clk_khz>600000 || hunt_s->a11clk_khz==custom_frequency) {
+		a11_div=0;
+		writel(hunt_s->a11clk_khz/19200, MSM_CLK_CTL_BASE+0x33C);
+		udelay(50);
+	}
+
 
 	/*
 	 * If the new clock divider is higher than the previous, then
@@ -413,7 +512,7 @@ static void acpuclk_set_div(const struct clkctl_acpu_speed *hunt_s) {
 	reg_clkctl = readl(A11S_CLK_CNTL_ADDR);
 	reg_clkctl &= ~(0xFF << (8 * src_sel));
 	reg_clkctl |= hunt_s->a11clk_src_sel << (4 + 8 * src_sel);
-	reg_clkctl |= hunt_s->a11clk_src_div << (0 + 8 * src_sel);
+	reg_clkctl |= a11_div << (0 + 8 * src_sel);
 	writel(reg_clkctl, A11S_CLK_CNTL_ADDR);
 
 	/* Program clock source selection */
@@ -679,6 +778,8 @@ uint32_t acpuclk_get_switch_time(void)
 #define REG2DIV(n)		((n)+1)
 #define SLOWER_BY(div, factor)	div = DIV2REG(REG2DIV(div) * factor)
 
+
+
 static void __init acpu_freq_tbl_fixup(void)
 {
 	unsigned long pll0_l, pll1_l, pll2_l;
@@ -689,6 +790,9 @@ static void __init acpu_freq_tbl_fixup(void)
 
 	/* Wait for the PLLs to be initialized and then read their frequency.
 	 */
+	pr_info("\nOverClock/Underclock Enabled\n\n");
+	pr_info("by Stefano Viola\n");
+	pr_info("estebanSannin\n");
 	do {
 		pll0_l = readl(PLLn_L_VAL(0)) & 0x3f;
 		cpu_relax();
@@ -898,7 +1002,15 @@ void __init msm_acpu_clock_init(struct msm_acpu_clock_platform_data *clkdata)
 	precompute_stepping();
 	if (cpu_is_msm7x25())
 		msm7x25_acpu_pll_hw_bug_fix();
-	acpuclk_init();
+
+#ifdef TURBO_MODE
+	//estebanSannin and JackTheVendicator
+	printk("FORCING TURBO MODE enabled!\n");
+		writel(55, MSM_CLK_CTL_BASE+0x320);
+		udelay(50);
+#endif
+
+acpuclk_init();
 	lpj_init();
 	print_acpu_freq_tbl();
 	if (cpu_is_msm7x27())
