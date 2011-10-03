@@ -619,7 +619,7 @@ config TOUCHSCREEN_CYPRESS_CPT
 	  module will be called cypress_cpt_i2c_ts.
 config  TOUCHSCREEN_SYNAPTICS_I2C_RMI_TM1319
 	default n
-	tristate "synaptics_i2c_rmi Touchscreen"
+	tristate "synaptics_i2c_rmi Touchscreen TM1319"
 	select SERIO
 	help
          Say Y here if you have a synaptics touchscrenn.
@@ -633,7 +633,7 @@ config  TOUCHSCREEN_SYNAPTICS_I2C_RMI_TM1319
 config  TOUCHSCREEN_SYNAPTICS_I2C_RMI_TM
 	default n
 	depends on HUAWEI_KERNEL
-	tristate "synaptics-rmi-tm Touchscreen"
+	tristate "synaptics-rmi-tm Touchscreen TM1537"
 	select SERIO
 	help
          Say Y here if you have a synaptics touchscrenn.
