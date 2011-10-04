@@ -4,7 +4,7 @@
 #include <linux/version.h>
 
 /* Uncomment this if you are using swap free notify patch */
-//#define CONFIG_SWAP_FREE_NOTIFY
+#define CONFIG_SWAP_FREE_NOTIFY
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35))
 #ifndef CONFIG_SWAP_FREE_NOTIFY
