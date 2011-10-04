@@ -215,7 +215,7 @@ static int pid_in_cmd;
 int udisk_in_norm = 0;
 
 #define STORE_FILE_DELAY            2
-#define STORE_FILE_RETRY_NUM        25
+#define STORE_FILE_RETRY_NUM       2 
 static int store_file_number = 0;
 static int store_file_lun_index = 0;
 static struct delayed_work store_file_work;
