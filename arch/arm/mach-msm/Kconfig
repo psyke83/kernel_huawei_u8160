@@ -1044,6 +1044,15 @@ config MSM_CPU_FREQ_OVERCLOCK
           Adds a number of overclocked frequencies
           If unsure, choose N.
 
+config MSM_CPU_FREQ_OVERCLOCK_AHB
+        bool "Overclock the CPU frequency"
+        depends on MSM_CPU_FREQ_OVERCLOCK
+        default n
+        help
+          Uses 33% higher AHB clock for the overclocked
+          frequencies on 528MHz CPUs.
+          If unsure, choose N.
+
 config MSM_CPU_FREQ_UNDERCLOCK
         bool "Underclock the CPU frequency"
         default n
