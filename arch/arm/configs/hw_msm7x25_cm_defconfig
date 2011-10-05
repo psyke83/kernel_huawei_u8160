@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.32.9
-# Tue Oct  4 01:08:22 2011
+# Wed Oct  5 22:25:36 2011
 #
 CONFIG_ARM=y
 CONFIG_SYS_SUPPORTS_APM_EMULATION=y
@@ -1677,6 +1677,7 @@ CONFIG_MSM_RPCSERVERS=y
 #
 # CONFIG_RAR_REGISTER is not set
 # CONFIG_IIO is not set
+CONFIG_RAMZSWAP=m
 CONFIG_ZRAM=m
 CONFIG_HUAWEI_HW_DEV_DCT=y
 CONFIG_HUAWEI_APPS=y
