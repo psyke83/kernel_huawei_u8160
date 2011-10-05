@@ -1,0 +1,6 @@
+config RAMZSWAP
+	tristate "Compressed swap (ramzswap) support"
+	depends on SWAP && CRYPTO_LZO
+	default n
+	---help---
+	  This will build the compressed swap (ramzswap) module
