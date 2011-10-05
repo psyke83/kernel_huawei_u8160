@@ -40,7 +40,7 @@
 #define OVERCLOCK_672000
 #define OVERCLOCK_691200
 #define OVERCLOCK_710400
-//#define OVERCLOCK_729600
+#define OVERCLOCK_729600
 //#define OVERCLOCK_748800
 //#define OVERCLOCK_768000
 
@@ -56,7 +56,7 @@
  *
  */
 
-//#define TURBO_MODE
+#define TURBO_MODE
 
 
 #include <linux/version.h>
