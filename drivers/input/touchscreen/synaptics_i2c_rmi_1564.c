@@ -1011,8 +1011,8 @@ static int synaptics_rmi4_probe(
 			/* Linux 2.6.31 multi-touch */
 			input_set_abs_params(ts->input_dev, ABS_MT_TRACKING_ID, 1,
                     			ts->f11.points_supported, 0, 0);
-			input_set_abs_params(ts->input_dev, ABS_MT_POSITION_X, 0, lcd_x, 0, 0);
-			input_set_abs_params(ts->input_dev, ABS_MT_POSITION_Y, 0, lcd_y, 0, 0);
+			input_set_abs_params(ts->input_dev, ABS_MT_POSITION_X, -1, lcd_x+1, 0, 0);
+			input_set_abs_params(ts->input_dev, ABS_MT_POSITION_Y, -1, lcd_y+1, 0, 0);
             input_set_abs_params(ts->input_dev, ABS_MT_WIDTH_MAJOR, 0, 15, 0, 0);
 			input_set_abs_params(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0, 0xF, 0, 0);
 			input_set_abs_params(ts->input_dev, ABS_MT_TOUCH_MINOR, 0, 0xF, 0, 0);
@@ -1020,8 +1020,8 @@ static int synaptics_rmi4_probe(
           }
           else
           {
-            input_set_abs_params(ts->input_dev, ABS_X, 0, lcd_x, 0, 0);
-            input_set_abs_params(ts->input_dev, ABS_Y, 0, lcd_y, 0, 0);
+            input_set_abs_params(ts->input_dev, ABS_X, -1, lcd_x+1, 0, 0);
+            input_set_abs_params(ts->input_dev, ABS_Y, -1, lcd_y+1, 0, 0);
             input_set_abs_params(ts->input_dev, ABS_PRESSURE, 0, 255, 0, 0);
             input_set_abs_params(ts->input_dev, ABS_TOOL_WIDTH, 0, 255, 0, 0);
                 
