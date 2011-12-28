@@ -2578,7 +2578,7 @@ static uint32_t msm_sdcc_setup_power(struct device *dv, unsigned int vdd)
 	}
 
 	if (!vreg_sts) {
-        /*wifi ¨¦?¦Ì?2??¨²¡ä?¡ä|¡ä|¨¤¨ª,¨¨?SD?¡§D¨¨¨°a?¨²¡ä?¡ä|¨¦?¦Ì?,??DT??vreg_mmc*/
+        /*wifi \A8\A6?\A6\CC?2??\A8\B2\A1\E4?\A1\E4|\A1\E4|\A8\A4\A8\AA,\A8\A8?SD?\A1\A7D\A8\A8\A8\B0a?\A8\B2\A1\E4?\A1\E4|\A8\A6?\A6\CC?,??DT??vreg_mmc*/
         //rc = vreg_set_level(vreg_mmc, 2850);
         if (!rc)
             //rc = vreg_enable(vreg_mmc);
@@ -3299,7 +3299,7 @@ static void __init virtualkeys_init(void)
         buf_vkey_size = sprintf(buf_virtualkey,
                  __stringify(EV_KEY) ":" __stringify(KEY_HOME)  ":28:340:30:30"
                 ":" __stringify(EV_KEY) ":" __stringify(KEY_MENU)   ":96:340:30:30"
-                ":" __stringify(EV_KEY) ":" __stringify(KEY_BACK)   ":144:340:30:30"
+                ":" __stringify(EV_KEY) ":" __stringify(KEY_BACK)   ":152:340:30:30"
                 ":" __stringify(EV_KEY) ":" __stringify(KEY_SEARCH) ":212:340:30:30"
         		   "\n");  
     }
