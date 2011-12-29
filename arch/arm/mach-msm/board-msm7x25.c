@@ -3316,7 +3316,7 @@ static void __init virtualkeys_init(void)
         buf_vkey_size = sprintf(buf_virtualkey,
                  __stringify(EV_KEY) ":" __stringify(KEY_BACK)  ":28:340:30:30"
                 ":" __stringify(EV_KEY) ":" __stringify(KEY_MENU)   ":96:340:30:30"
-                ":" __stringify(EV_KEY) ":" __stringify(KEY_HOME)   ":144:340:30:30"
+                ":" __stringify(EV_KEY) ":" __stringify(KEY_HOME)   ":152:340:30:30"
                 ":" __stringify(EV_KEY) ":" __stringify(KEY_SEARCH) ":212:340:30:30"
         		   "\n");  
     }
