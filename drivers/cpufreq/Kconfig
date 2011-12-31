@@ -125,6 +125,13 @@ config CPU_FREQ_DEFAULT_GOV_INTERACTIVE
 	 scaling for workloads that are latency sensitive, typically interactive
 	 workloads..
 
+
+config CPU_FREQ_DEFAULT_GOV_INTERACTIVEX
+	bool "interactive"
+	select CPU_FREQ_GOV_INTERACTIVEX
+	help
+	 Use the CPUFreq governor 'interactivex' as default.
+
 endchoice
 
 config CPU_FREQ_GOV_PERFORMANCE
@@ -219,5 +226,14 @@ config CPU_FREQ_GOV_SMARTASS2
 	  'smartassV2' - a "smart" optimized governor for the hero!
 
 	  If in doubt, say N.
+
+
+config CPU_FREQ_GOV_INTERACTIVEX
+	tristate "'interactivex' cpufreq policy governor"
+	help
+	interactivex' - This driver adds a dynamic cpufreq policy governor
+	designed for latency-sensitive workloads.
+
+	If in doubt, say N.
 
 endif	# CPU_FREQ
