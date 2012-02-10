@@ -6,7 +6,7 @@ DHDCFLAGS = -DLINUX -DBCMDRIVER -DBCMDONGLEHOST -DDHDTHREAD               \
 	-DBCMLXSDMMC -DBCMPLATFORM_BUS -DEMBEDDED_PLATFORM -DOEM_ANDROID      \
 	-DARP_OFFLOAD_SUPPORT -DPKT_FILTER_SUPPORT                            \
 	-DCUSTOMER_HW2 -DCUSTOM_OOB_GPIO_NUM=17 -DCUSTOM_SDCC_WIFI_SLOT=2     \
-	-DSOFTAP -Wall -Wstrict-prototypes                                    \                                            \
+	-DSOFTAP -Wall -Wstrict-prototypes                                    \
 	-Idrivers/net/wireless/bcm4329 -Idrivers/net/wireless/bcm4329/include
 
 DHDOFILES = dhd_linux.o linux_osl.o bcmutils.o dhd_common.o dhd_custom_gpio.o \
