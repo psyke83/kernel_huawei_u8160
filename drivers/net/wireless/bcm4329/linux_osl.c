@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: linux_osl.c,v 1.125.12.3.8.6 2009/12/09 01:29:03 Exp $
+ * $Id: linux_osl.c,v 1.125.12.3.8.7 2010/05/04 21:10:04 Exp $
  */
 
 
@@ -154,10 +154,9 @@ osl_attach(void *pdev, uint bustype, bool pkttag)
 	gfp_t flags;
 
 	flags = (in_atomic()) ? GFP_ATOMIC : GFP_KERNEL;
-	osh = kmalloc(sizeof(osl_t), flags);
+	osh = kzalloc(sizeof(osl_t), flags);
 	ASSERT(osh);
 
-	bzero(osh, sizeof(osl_t));
 
 	
 	ASSERT(ABS(BCME_LAST) == (ARRAYSIZE(linuxbcmerrormap) - 1));
@@ -246,8 +245,10 @@ void*
 osl_pktget(osl_t *osh, uint len)
 {
 	struct sk_buff *skb;
+	gfp_t flags;
 
-	if ((skb = dev_alloc_skb(len))) {
+	flags = (in_atomic()) ? GFP_ATOMIC : GFP_KERNEL;
+	if ((skb = __dev_alloc_skb(len, flags))) {
 		skb_put(skb, len);
 		skb->priority = 0;
 
@@ -511,7 +512,7 @@ osl_mfree(osl_t *osh, void *addr, uint size)
 #ifdef DHD_USE_STATIC_BUF
 	if (bcm_static_buf)
 	{
-		if ((addr > (void *)bcm_static_buf) && ((unsigned char *)addr \
+		if ((addr > (void *)bcm_static_buf) && ((unsigned char *)addr
 			<= ((unsigned char *)bcm_static_buf + STATIC_BUF_TOTAL_LEN)))
 		{
 			int buf_idx = 0;

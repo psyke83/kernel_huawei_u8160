@@ -13,13 +13,27 @@ config BCM4329
 config BCM4329_FW_PATH
 	depends on BCM4329
 	string "Firmware path"
-	default "/system/etc/firmware/fw_bcm4329.bin"
+	default "/system/lib/hw/wlan/fw_bcm4329.bin"
 	---help---
 	  Path to the firmware file.
 
 config BCM4329_NVRAM_PATH
 	depends on BCM4329
 	string "NVRAM path"
-	default "/proc/calibration"
+	default "/system/lib/hw/wlan/nvram.txt"
 	---help---
 	  Path to the calibration file.
+
+config BCM4329_ENABLE_CSCAN
+        depends on BCM4329
+        bool "Enable CSCAN"
+        default n
+        ---help---
+          Enable the use of CSCAN methods.
+
+config BCM4329_ENABLE_PNO_SUPPORT
+        depends on BCM4329_ENABLE_CSCAN
+        bool "Enable PNO_SUPPORT"
+        default n
+        ---help---
+          Enable the use of PNO_SUPPORT methods.

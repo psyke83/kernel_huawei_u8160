@@ -24,7 +24,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: wlioctl.h,v 1.601.4.15.2.14.2.59 2010/02/09 13:23:22 Exp $
+ * $Id: wlioctl.h,v 1.601.4.15.2.14.2.62.4.3 2011/02/09 23:31:02 Exp $
  */
 
 
@@ -254,7 +254,6 @@ typedef struct wl_join_params {
 
 #define WLC_CNTRY_BUF_SZ	4		
 
-
 typedef enum sup_auth_status {
 	
 	WLC_SUP_DISCONNECTED = 0,
@@ -288,6 +287,7 @@ typedef enum sup_auth_status {
 #define CRYPTO_ALGO_AES_OCB_MSDU	5
 #define CRYPTO_ALGO_AES_OCB_MPDU	6
 #define CRYPTO_ALGO_NALG		7
+#define CRYPTO_ALGO_SMS4		11
 
 #define WSEC_GEN_MIC_ERROR	0x0001
 #define WSEC_GEN_REPLAY		0x0002
@@ -338,6 +338,7 @@ typedef struct {
 #define AES_ENABLED		0x0004
 #define WSEC_SWFLAG		0x0008
 #define SES_OW_ENABLED		0x0040	
+#define SMS4_ENABLED		0x0100
 
 
 #define WPA_AUTH_DISABLED	0x0000	
@@ -349,6 +350,7 @@ typedef struct {
 #define WPA2_AUTH_PSK		0x0080	
 #define BRCM_AUTH_PSK           0x0100  
 #define BRCM_AUTH_DPT		0x0200	
+#define WPA_AUTH_WAPI		0x0400	
 
 #define WPA_AUTH_PFN_ANY	0xffffffff	
 
@@ -854,6 +856,7 @@ typedef struct wl_ioctl {
 #define PM_MAX	1
 #define PM_FAST 2
 
+#define LISTEN_INTERVAL			10
 
 #define	INTERFERE_NONE	0	
 #define	NON_WLAN	1	
@@ -1305,14 +1308,20 @@ enum {
 #define ENABLE_BKGRD_SCAN_BIT	2
 #define IMMEDIATE_SCAN_BIT		3
 #define	AUTO_CONNECT_BIT		4
+#define	ENABLE_BD_SCAN_BIT		5
+#define ENABLE_ADAPTSCAN_BIT	6
 
 #define SORT_CRITERIA_MASK		0x01
 #define AUTO_NET_SWITCH_MASK	0x02
 #define ENABLE_BKGRD_SCAN_MASK	0x04
 #define IMMEDIATE_SCAN_MASK		0x08
 #define	AUTO_CONNECT_MASK		0x10
+#define ENABLE_BD_SCAN_MASK		0x20
+#define ENABLE_ADAPTSCAN_MASK	0x40
 
 #define PFN_VERSION			1
+
+#define MAX_PFN_LIST_COUNT	16
 
 
 typedef struct wl_pfn_param {
@@ -1321,6 +1330,8 @@ typedef struct wl_pfn_param {
 	int32 lost_network_timeout;	
 	int16 flags;			
 	int16 rssi_margin;		
+	int32  repeat_scan;
+	int32  max_freq_adjust;
 } wl_pfn_param_t;
 
 typedef struct wl_pfn {
@@ -1328,15 +1339,13 @@ typedef struct wl_pfn {
 	int32			bss_type;		
 	int32			infra;			
 	int32			auth;			
-	int32			wpa_auth;		
+	uint32			wpa_auth;		
 	int32			wsec;			
-#ifdef WLPFN_AUTO_CONNECT
-	union {
-		wl_wsec_key_t	sec_key;		
-		wsec_pmk_t	wpa_sec_key;		
-	} pfn_security;
-#endif 
 } wl_pfn_t;
+
+#define PNO_SCAN_MAX_FW		508*1000
+#define PNO_SCAN_MAX_FW_SEC	PNO_SCAN_MAX_FW/1000
+#define PNO_SCAN_MIN_FW_SEC	10
 
 
 #define TOE_TX_CSUM_OL		0x00000001

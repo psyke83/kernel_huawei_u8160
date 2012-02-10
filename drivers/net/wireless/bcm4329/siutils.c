@@ -22,7 +22,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: siutils.c,v 1.662.4.4.4.16.4.26 2010/02/01 05:51:56 Exp $
+ * $Id: siutils.c,v 1.662.4.4.4.16.4.28 2010/06/23 21:37:54 Exp $
  */
 
 #include <typedefs.h>
@@ -171,9 +171,10 @@ si_buscore_prep(si_info_t *sii, uint bustype, uint devid, void *sdh)
 				OSL_DELAY(65);
 			}
 		}
-
+#ifndef MMC_SDIO_FORCE_PULLUP
 		/* Also, disable the extra SDIO pull-ups */
 		bcmsdh_cfg_write(sdh, SDIO_FUNC_1, SBSDIO_FUNC1_SDIOPULLUP, 0, NULL);
+#endif
 	}
 
 
