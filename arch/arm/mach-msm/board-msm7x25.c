@@ -479,7 +479,7 @@ static int hsusb_rpc_connect(int connect)
 }
 #endif
 
-#if defined(CONFIG_USB_MSM_OTG_72K) || defined(CONFIG_USB_EHCI_MSM)
+#if defined(CONFIG_USB_MSM_OTG_72K) || defined(CONFIG_USB_EHCI_MSM) || defined(CONFIG_USB_EHCI_MSM7201)
 static int msm_hsusb_rpc_phy_reset(void __iomem *addr)
 {
 	return msm_hsusb_phy_reset();
@@ -2432,7 +2432,7 @@ static struct msm_acpu_clock_platform_data msm7x2x_clock_data = {
 void msm_serial_debug_init(unsigned int base, int irq,
 			   struct device *clk_device, int signal_irq);
 
-#ifdef CONFIG_USB_EHCI_MSM
+#if defined(CONFIG_USB_EHCI_MSM) || defined(CONFIG_USB_EHCI_MSM7201)
 static void msm_hsusb_vbus_power(unsigned phy_info, int on)
 {
 	if (on)
@@ -2448,6 +2448,7 @@ static struct msm_usb_host_platform_data msm_usb_host_pdata = {
 };
 static void __init msm7x2x_init_host(void)
 {
+printk("msm7x2x_init_host()\n");	
 	if (machine_is_msm7x25_ffa() || machine_is_msm7x27_ffa())
 		return;
 
@@ -3456,7 +3457,7 @@ static void __init msm7x2x_init(void)
 	lcdc_gpio_init();
 	msm_fb_add_devices();
 	rmt_storage_add_ramfs();
-#ifdef CONFIG_USB_EHCI_MSM
+#if defined(CONFIG_USB_EHCI_MSM) || defined(CONFIG_USB_EHCI_MSM7201)
 	msm7x2x_init_host();
 #endif
 #ifdef CONFIG_HUAWEI_JOGBALL

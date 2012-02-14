@@ -153,6 +153,15 @@ config USB_EHCI_MSM
 	  Enables support for the USB controller present on the
 	  Qualcomm chipsets.
 
+
+config USB_EHCI_MSM7201
+  bool "Support for Qualcomm MSM7225 on-chip EHCI USB controller"
+  depends on USB_EHCI_HCD && (ARCH_MSM7XXX || ARCH_MSM || ARCH_MSM7X00A) && (!USB_FUNCTION)
+  select USB_EHCI_ROOT_HUB_TT
+  ---help---
+    Variation of ARC USB block used in Qualcomm MSM7225 chips.
+
+
 config USB_FS_HOST
 	bool "Support for Full Speed Host Mode"
 	depends on USB_EHCI_MSM && ARCH_QSD8X50

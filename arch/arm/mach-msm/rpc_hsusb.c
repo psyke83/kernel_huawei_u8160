@@ -579,7 +579,7 @@ int msm_hsusb_disable_pmic_ulpidata0(void)
 }
 EXPORT_SYMBOL(msm_hsusb_disable_pmic_ulpidata0);
 
-#ifdef CONFIG_USB_GADGET_MSM_72K
+#if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM7201)
 /* charger api wrappers */
 int hsusb_chg_init(int connect)
 {

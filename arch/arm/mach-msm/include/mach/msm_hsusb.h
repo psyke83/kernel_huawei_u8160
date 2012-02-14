@@ -63,7 +63,7 @@ struct usb_composition {
 };
 #endif
 
-#ifdef CONFIG_USB_GADGET_MSM_72K
+#if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM7201)
 enum chg_type {
 	USB_CHG_TYPE__SDP,
 	USB_CHG_TYPE__CARKIT,
